@@ -171,9 +171,18 @@ app.whenReady().then(() => {
           // Small delay to ensure focus is on target app
           await new Promise(resolve => setTimeout(resolve, 100));
           
-          // Escape the text for command line (handle quotes and special chars)
-          // Use JSON.stringify to properly escape the text
-          const escapedText = JSON.stringify(lastGeneratedText);
+          // Escape the text for command line
+          // Replace newlines with spaces and escape quotes for Windows command line
+          // The Rust code will handle unescaping \n sequences
+          let escapedText = lastGeneratedText
+            .replace(/\\/g, '\\\\')  // Escape backslashes first
+            .replace(/"/g, '\\"')     // Escape quotes
+            .replace(/\n/g, '\\n')   // Convert newlines to \n strings
+            .replace(/\r/g, '\\r')   // Convert carriage returns to \r strings
+            .replace(/\t/g, '\\t');  // Convert tabs to \t strings
+          
+          // Wrap in quotes for command line
+          escapedText = `"${escapedText}"`;
           
           // Call Rust injector - pass text as argument
           const { exec } = require('child_process');

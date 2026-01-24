@@ -1,0 +1,146 @@
+# AI Text Bot - Email Completion Assistant
+
+An AI-powered email completion bot with a transparent overlay interface that helps you write professional emails using Google's Gemini API.
+
+## Features
+
+- 🤖 **AI-Powered Email Generation**: Uses Google Gemini API to generate professional emails
+- 🪟 **Transparent Overlay**: Non-intrusive transparent window that stays on top
+- ⌨️ **Quick Paste**: Press Tab to accept and paste generated text at your cursor position
+- 🎯 **Smart Positioning**: Output appears near your cursor position
+- 🌐 **Cross-Platform**: Works on Windows, macOS, and Linux
+
+## Prerequisites
+
+- **Python 3.7+** installed and in your PATH
+- **Node.js 16+** and npm
+- **Rust** (optional but recommended for fast keyboard injection) - Get from [rustup.rs](https://rustup.rs/)
+- **Google AI Studio API Key**: Get one from [Google AI Studio](https://makersuite.google.com/app/apikey)
+
+## Setup Instructions
+
+### 1. Install Python Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Configure Google AI API
+
+You need to set up authentication for Google's Gemini API. The `google-genai` library uses environment variables or application default credentials.
+
+**Option A: Environment Variable (Recommended)**
+```bash
+# Windows (PowerShell)
+$env:GOOGLE_API_KEY="your-api-key-here"
+
+# Windows (CMD)
+set GOOGLE_API_KEY=your-api-key-here
+
+# macOS/Linux
+export GOOGLE_API_KEY="your-api-key-here"
+```
+
+**Option B: Application Default Credentials**
+Follow Google's [authentication guide](https://cloud.google.com/docs/authentication/application-default-credentials) to set up ADC.
+
+### 3. Install Node.js Dependencies
+
+```bash
+npm install
+```
+
+**Important**: After installing, you need to rebuild `robotjs` for Electron:
+
+```bash
+npm run rebuild
+```
+
+Or it will automatically rebuild after `npm install` (via postinstall script).
+
+**Note**: `robotjs` may require additional build tools. If you encounter issues:
+
+- **Windows**: Install [windows-build-tools](https://github.com/nodejs/node-gyp#on-windows) or [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
+- **macOS**: Install Xcode Command Line Tools: `xcode-select --install`
+- **Linux**: Install build essentials: `sudo apt-get install build-essential libxtst-dev libpng++-dev`
+
+**If robotjs fails to build**: The app will fall back to copying text to clipboard. You can then manually paste with Ctrl+V.
+
+### 4. Build Rust Keyboard Injector
+
+The app uses a Rust-based keyboard injection system for fast text input. Build it with:
+
+```bash
+cd keyboard-inject
+cargo build --release
+cd ..
+```
+
+**Note**: You need Rust installed. Get it from [rustup.rs](https://rustup.rs/)
+
+If Rust is not available, the app will fall back to clipboard paste method.
+
+### 5. Run the Application
+
+```bash
+npm start
+```
+
+## Usage
+
+1. **Toggle Window**: Press `Ctrl+Shift+Space` (or `Cmd+Shift+Space` on macOS) to show/hide the overlay
+2. **Enter Prompt**: Type your email request, e.g., "Write an email to my boss requesting time off next week"
+3. **Generate**: Press Enter or click the Generate button
+4. **Review**: The generated email will appear in a transparent floating window at the top-left
+5. **Accept**: Press `Ctrl+Shift+P` to accept and paste the text at your current cursor position (uses fast Rust-based injection)
+6. **Close**: Press `Escape` or click the × button to close the output without pasting
+
+## Example Prompts
+
+- "Write a professional email to schedule a meeting with the client"
+- "Draft an email to my team about the project deadline extension"
+- "Create a follow-up email after a job interview"
+- "Write a thank you email to a colleague"
+
+## Project Structure
+
+```
+ai-text-bot/
+├── email_ai_backend.py    # Python backend for Gemini API
+├── main.js                # Electron main process
+├── index.html             # UI structure
+├── styles.css             # Styling
+├── renderer.js            # Frontend logic
+├── package.json           # Node.js dependencies
+├── requirements.txt       # Python dependencies
+└── README.md             # This file
+```
+
+## Troubleshooting
+
+### Python Script Not Found
+- Ensure Python is in your PATH
+- On Windows, you may need to use `python3` instead of `python`
+
+### robotjs Installation Issues
+- Make sure you have the required build tools installed
+- Try: `npm install --build-from-source robotjs`
+
+### API Authentication Errors
+- Verify your `GOOGLE_API_KEY` environment variable is set correctly
+- Check that your API key has access to Gemini models
+
+### Window Not Appearing
+- Check if the window is hidden behind other applications
+- Try pressing `Ctrl+Shift+Space` again to toggle visibility
+
+## Keyboard Shortcuts
+
+- `Ctrl+Shift+Space` / `Cmd+Shift+Space`: Toggle overlay window
+- `Enter`: Generate email from input
+- `Ctrl+Shift+P`: Accept and paste generated text (uses Rust keyboard injection)
+- `Escape`: Close output display
+
+## License
+
+MIT

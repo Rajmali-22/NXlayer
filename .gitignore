@@ -1,0 +1,16 @@
+node_modules/
+*.log
+.DS_Store
+.env
+*.pyc
+__pycache__/
+.vscode/
+.idea/
+dist/
+build/
+*.exe
+*.dmg
+*.deb
+*.rpm
+keyboard-inject/target/
+keyboard-inject/Cargo.lock

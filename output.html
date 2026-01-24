@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generated Email</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: rgba(30, 30, 30, 0.75);
+            backdrop-filter: blur(15px);
+            border-radius: 12px;
+            overflow: hidden;
+            -webkit-app-region: drag;
+        }
+
+        .output-content {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .output-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            -webkit-app-region: no-drag;
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: all 0.2s;
+            -webkit-app-region: no-drag;
+        }
+
+        .close-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .output-text {
+            padding: 16px;
+            color: #ffffff;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-y: auto;
+            flex: 1;
+            -webkit-app-region: no-drag;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            margin: 8px;
+        }
+
+        .output-text::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .output-text::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+
+        .output-text::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+
+        .output-text::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .output-footer {
+            padding: 10px 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.3);
+            -webkit-app-region: no-drag;
+        }
+
+        .hint {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+        }
+
+        kbd {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-family: monospace;
+            font-size: 11px;
+            margin: 0 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="output-content">
+        <div class="output-header">
+            <span>Generated Email</span>
+            <button id="close-output" class="close-btn">×</button>
+        </div>
+        <div id="output-text" class="output-text"></div>
+        <div class="output-footer">
+            <span class="hint">Press <kbd>Ctrl+Shift+P</kbd> in main window to accept and paste</span>
+        </div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        
+        const outputText = document.getElementById('output-text');
+        const closeBtn = document.getElementById('close-output');
+        
+        // Listen for text to display
+        ipcRenderer.on('display-text', (event, text) => {
+            outputText.textContent = text;
+        });
+        
+        // Close button
+        closeBtn.addEventListener('click', () => {
+            ipcRenderer.invoke('hide-output');
+        });
+        
+        // Escape key to close
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                ipcRenderer.invoke('hide-output');
+            }
+        });
+    </script>
+</body>
+</html>

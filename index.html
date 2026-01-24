@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Text Bot</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="overlay-container">
+        <!-- Input area at bottom -->
+        <div class="input-container">
+            <div class="input-wrapper">
+                <input 
+                    type="text" 
+                    id="prompt-input" 
+                    class="prompt-input" 
+                    placeholder="Describe your email request... (Press Ctrl+Shift+Space to toggle)"
+                    autocomplete="off"
+                />
+                <button id="generate-btn" class="generate-btn">Generate</button>
+            </div>
+            <div id="status" class="status hidden"></div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

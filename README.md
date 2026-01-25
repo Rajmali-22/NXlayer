@@ -15,7 +15,7 @@ An AI-powered email completion bot with a transparent overlay interface that hel
 - **Python 3.7+** installed and in your PATH
 - **Node.js 16+** and npm
 - **Rust** (optional but recommended for fast keyboard injection) - Get from [rustup.rs](https://rustup.rs/)
-- **Google AI Studio API Key**: Get one from [Google AI Studio](https://makersuite.google.com/app/apikey)
+- **Mistral AI API Key**: Get one from [Mistral AI Console](https://console.mistral.ai/api-keys/)
 
 ## Setup Instructions
 
@@ -25,24 +25,29 @@ An AI-powered email completion bot with a transparent overlay interface that hel
 pip install -r requirements.txt
 ```
 
-### 2. Configure Google AI API
+### 2. Configure Mistral AI API
 
-You need to set up authentication for Google's Gemini API. The `google-genai` library uses environment variables or application default credentials.
+You need to set up your Mistral AI API key. Add it to your `.env` file or set it as an environment variable.
 
 **Option A: Environment Variable (Recommended)**
 ```bash
 # Windows (PowerShell)
-$env:GOOGLE_API_KEY="your-api-key-here"
+$env:MISTRAL_API_KEY="your-api-key-here"
 
 # Windows (CMD)
-set GOOGLE_API_KEY=your-api-key-here
+set MISTRAL_API_KEY=your-api-key-here
 
 # macOS/Linux
-export GOOGLE_API_KEY="your-api-key-here"
+export MISTRAL_API_KEY="your-api-key-here"
 ```
 
-**Option B: Application Default Credentials**
-Follow Google's [authentication guide](https://cloud.google.com/docs/authentication/application-default-credentials) to set up ADC.
+**Option B: .env File**
+Create a `.env` file in the project root:
+```
+MISTRAL_API_KEY=your-api-key-here
+```
+
+Get your API key from: https://console.mistral.ai/api-keys/
 
 ### 3. Install Node.js Dependencies
 
@@ -127,8 +132,9 @@ ai-text-bot/
 - Try: `npm install --build-from-source robotjs`
 
 ### API Authentication Errors
-- Verify your `GOOGLE_API_KEY` environment variable is set correctly
-- Check that your API key has access to Gemini models
+- Verify your `MISTRAL_API_KEY` environment variable is set correctly
+- Check that your API key is valid and has credits/quota available
+- Get a new API key from: https://console.mistral.ai/api-keys/
 
 ### Window Not Appearing
 - Check if the window is hidden behind other applications

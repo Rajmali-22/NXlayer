@@ -280,12 +280,22 @@ ipcMain.handle('generate-email', async (event, prompt, context) => {
       if (fs.existsSync(configPath)) {
         try {
           const configContent = fs.readFileSync(configPath, 'utf8');
-          const apiKeyMatch = configContent.match(/GOOGLE_API_KEY\s*=\s*([^\s#\n]+)/);
-          if (apiKeyMatch) {
-            const apiKey = apiKeyMatch[1].trim().replace(/^["']|["']$/g, '');
+          // Try Mistral API key first, then fallback to Google for compatibility
+          const mistralKeyMatch = configContent.match(/MISTRAL_API_KEY\s*=\s*([^\s#\n]+)/);
+          const googleKeyMatch = configContent.match(/GOOGLE_API_KEY\s*=\s*([^\s#\n]+)/);
+          
+          if (mistralKeyMatch) {
+            const apiKey = mistralKeyMatch[1].trim().replace(/^["']|["']$/g, '');
+            if (apiKey && apiKey !== 'your-api-key-here') {
+              env.MISTRAL_API_KEY = apiKey;
+              console.log('Mistral API key loaded from', configFile);
+            }
+          } else if (googleKeyMatch) {
+            // Fallback to Google API key for backward compatibility
+            const apiKey = googleKeyMatch[1].trim().replace(/^["']|["']$/g, '');
             if (apiKey && apiKey !== 'your-api-key-here') {
               env.GOOGLE_API_KEY = apiKey;
-              console.log('API key loaded from', configFile);
+              console.log('Google API key loaded from', configFile, '(fallback)');
             }
           }
         } catch (err) {

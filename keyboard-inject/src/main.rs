@@ -26,11 +26,11 @@ fn send_text(text: &str) {
             send_key_input(vkey, KEYBD_EVENT_FLAGS(0));
             
             // Release the key
-            send_key_input(vkey, KEYBD_EVENT_FLAGS(KEYEVENTF_KEYUP));
+            send_key_input(vkey, KEYEVENTF_KEYUP);
             
             // Release Shift if it was pressed
             if shift_needed {
-                send_key_input(VK_SHIFT.0 as u8, KEYBD_EVENT_FLAGS(KEYEVENTF_KEYUP));
+                send_key_input(VK_SHIFT.0 as u8, KEYEVENTF_KEYUP);
             }
             
             // Minimal delay between characters (1ms for speed)
@@ -51,8 +51,8 @@ fn get_virtual_key(ch: char) -> (u8, bool) {
             // For special characters, use VkKeyScan
             unsafe {
                 let scan = VkKeyScanW(ch as u16);
-                let vkey = (scan.0 & 0xFF) as u8;
-                let shift = (scan.0 & 0x0100) != 0;
+                let vkey = (scan as u16 & 0xFF) as u8;
+                let shift = (scan as u16 & 0x0100) != 0;
                 
                 if vkey != 0 {
                     (vkey, shift)
@@ -88,6 +88,13 @@ fn get_virtual_key(ch: char) -> (u8, bool) {
     }
 }
 
+fn unescape_newlines(text: &str) -> String {
+    // Replace literal \n sequences with actual newlines
+    text.replace("\\n", "\n")
+        .replace("\\r", "\r")
+        .replace("\\t", "\t")
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     
@@ -96,9 +103,10 @@ fn main() {
         std::process::exit(1);
     }
     
-    let text = &args[1];
+    // Unescape newlines and other escape sequences
+    let text = unescape_newlines(&args[1]);
     
-    // Split by newlines and send each line
+    // Split by actual newlines and send each line
     let lines: Vec<&str> = text.split('\n').collect();
     
     for (i, line) in lines.iter().enumerate() {
@@ -108,10 +116,8 @@ fn main() {
         
         // Press Enter after each line except the last
         if i < lines.len() - 1 {
-            unsafe {
-                send_key_input(VK_RETURN.0 as u8, KEYBD_EVENT_FLAGS(0));
-                send_key_input(VK_RETURN.0 as u8, KEYBD_EVENT_FLAGS(KEYEVENTF_KEYUP));
-            }
+            send_key_input(VK_RETURN.0 as u8, KEYBD_EVENT_FLAGS(0));
+            send_key_input(VK_RETURN.0 as u8, KEYEVENTF_KEYUP);
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
     }

@@ -1,7 +1,7 @@
 """
-AI Email Completion Backend using Google Gemini API
+AI Email Completion Backend using Mistral AI API
 """
-from google import genai
+from mistralai import Mistral
 import json
 import sys
 import os
@@ -10,7 +10,7 @@ import re
 def load_api_key():
     """Load API key from environment variable or config file."""
     # First try environment variable
-    api_key = os.getenv('GOOGLE_API_KEY')
+    api_key = os.getenv('MISTRAL_API_KEY')
     if api_key:
         return api_key
     
@@ -21,8 +21,8 @@ def load_api_key():
             try:
                 with open(config_file, 'r') as f:
                     content = f.read()
-                    # Look for GOOGLE_API_KEY=value pattern
-                    match = re.search(r'GOOGLE_API_KEY\s*=\s*([^\s#\n]+)', content)
+                    # Look for MISTRAL_API_KEY=value pattern
+                    match = re.search(r'MISTRAL_API_KEY\s*=\s*([^\s#\n]+)', content)
                     if match:
                         api_key = match.group(1).strip().strip('"').strip("'")
                         if api_key and api_key != 'your-api-key-here':
@@ -32,14 +32,12 @@ def load_api_key():
     
     return None
 
-# Initialize the Gemini client
+# Initialize the Mistral client
 api_key = load_api_key()
-if api_key:
-    client = genai.Client(api_key=api_key)
-else:
+if not api_key:
     raise ValueError(
-        "Missing API key! Set GOOGLE_API_KEY environment variable or add it to .env/config.example.env file.\n"
-        "Get your API key from: https://makersuite.google.com/app/apikey"
+        "Missing API key! Set MISTRAL_API_KEY environment variable or add it to .env/config.example.env file.\n"
+        "Get your API key from: https://console.mistral.ai/api-keys/"
     )
 
 def generate_professional_email(prompt: str, context: dict = None) -> str:
@@ -82,38 +80,26 @@ IMPORTANT:
     
     for attempt in range(max_retries):
         try:
-            response = client.models.generate_content(
-                model="gemini-3-flash-preview",
-                contents=structured_prompt,
-            )
+            with Mistral(api_key=api_key) as mistral:
+                response = mistral.chat.complete(
+                    model="mistral-small-latest",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": structured_prompt
+                        }
+                    ],
+                    stream=False
+                )
             
-            # Try multiple ways to extract text from response
+            # Extract text from Mistral response
             text = None
             
-            # Method 1: Direct text attribute
-            if hasattr(response, 'text') and response.text is not None:
-                text = response.text
-            
-            # Method 2: From candidates
-            if not text and hasattr(response, 'candidates') and response.candidates:
-                candidate = response.candidates[0]
-                if hasattr(candidate, 'content'):
-                    content = candidate.content
-                    if hasattr(content, 'parts') and content.parts:
-                        for part in content.parts:
-                            if hasattr(part, 'text') and part.text:
-                                text = part.text
-                                break
-            
-            # Method 3: Try accessing directly
-            if not text:
-                try:
-                    text = str(response)
-                    # If it's not a proper text response, try to parse
-                    if 'text' in dir(response):
-                        text = response.text
-                except:
-                    pass
+            # Mistral response structure: response.choices[0].message.content
+            if hasattr(response, 'choices') and response.choices:
+                if hasattr(response.choices[0], 'message'):
+                    if hasattr(response.choices[0].message, 'content'):
+                        text = response.choices[0].message.content
             
             if text:
                 # Clean up the text - remove any subject lines if present
@@ -139,7 +125,7 @@ IMPORTANT:
             error_str = str(e)
             
             # Check for 503 or rate limit errors
-            if '503' in error_str or 'UNAVAILABLE' in error_str or 'overloaded' in error_str.lower():
+            if '503' in error_str or 'UNAVAILABLE' in error_str or 'overloaded' in error_str.lower() or 'service unavailable' in error_str.lower():
                 if attempt < max_retries - 1:
                     wait_time = retry_delay * (attempt + 1)
                     print(f"API overloaded. Retrying in {wait_time} seconds... (Attempt {attempt + 1}/{max_retries})", file=sys.stderr)
@@ -151,6 +137,10 @@ IMPORTANT:
             # Check for other API errors
             if '429' in error_str or 'quota' in error_str.lower() or 'rate limit' in error_str.lower():
                 return "Error: API rate limit exceeded. Please wait a moment and try again."
+            
+            # Check for authentication errors
+            if '401' in error_str or 'unauthorized' in error_str.lower() or 'invalid api key' in error_str.lower():
+                return "Error: Invalid API key. Please check your MISTRAL_API_KEY."
             
             # Generic error
             return f"Error generating email: {error_str}"

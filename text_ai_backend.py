@@ -1,5 +1,5 @@
 """
-AI Email Completion Backend using Mistral AI API
+AI Text Generation Backend using Mistral AI API
 """
 from mistralai import Mistral
 import json
@@ -40,38 +40,61 @@ if not api_key:
         "Get your API key from: https://console.mistral.ai/api-keys/"
     )
 
-def generate_professional_email(prompt: str, context: dict = None) -> str:
+def generate_text(prompt: str, context: dict = None) -> str:
     """
-    Generate a professional email using structured prompt and Gemini API.
+    Generate text content using structured prompt and Mistral API.
     
     Args:
-        prompt: User's email request/description
-        context: Optional context (recipient, subject, tone, etc.)
+        prompt: User's text request/description
+        context: Optional context (tone, style, length, etc.)
     
     Returns:
-        Generated professional email text
+        Generated text content
     """
     
-    # Structured prompt for professional email generation
-    structured_prompt = f"""You are a professional email assistant. Generate a well-structured, professional email body based on the following request.
+    # Get tone from context, default to professional
+    tone = context.get("tone", "professional") if context else "professional"
+    
+    # Debug logging
+    print(f"DEBUG: generate_text called with tone='{tone}'", file=sys.stderr)
+    print(f"DEBUG: Full context: {context}", file=sys.stderr)
+    
+    # Build tone-specific instructions
+    tone_instructions = {
+        "professional": "Use formal, respectful, and business-appropriate language. Maintain a polished and courteous tone.",
+        "casual": "Use friendly, relaxed, and conversational language. Write as if speaking to a friend or colleague.",
+        "friendly": "Use warm, approachable, and positive language. Be personable and engaging.",
+        "formal": "Use very formal, official language. Follow strict business or academic conventions.",
+        "creative": "Use expressive, engaging, and imaginative language. Be descriptive and vivid.",
+        "technical": "Use precise, clear, and jargon-appropriate language. Focus on accuracy and clarity.",
+        "persuasive": "Use compelling, convincing language. Structure arguments clearly and use persuasive techniques.",
+        "concise": "Use brief, direct, and to-the-point language. Eliminate unnecessary words."
+    }
+    
+    tone_guide = tone_instructions.get(tone.lower(), tone_instructions["professional"])
+    
+    # Structured prompt for text generation
+    structured_prompt = f"""You are a versatile text assistant. Generate well-structured text content based on the following request.
 
 USER REQUEST: {prompt}
 
 {_build_context_section(context) if context else ""}
 
-Please generate ONLY the email body content that:
-1. Has an appropriate greeting (e.g., "Dear [Name]," or "Hello,")
-2. Contains the main message content - clear and concise
-3. Uses professional language
-4. Has a proper closing (e.g., "Best regards," "Sincerely," etc.)
-5. Is well-formatted and easy to read
+TONE: {tone}
+TONE INSTRUCTIONS: {tone_guide}
+
+Please generate the text content that:
+1. Directly addresses the user's request
+2. Matches the specified tone ({tone})
+3. Is clear, well-formatted, and easy to read
+4. Is appropriate for the context and purpose
 
 IMPORTANT:
-- Do NOT include a subject line
-- Do NOT include "Subject:" or any subject field
-- Generate ONLY the email body text starting with the greeting
+- Generate ONLY the text body/content
+- Do NOT include titles, headers, or subject lines unless specifically requested
 - Do not include any explanations, meta-commentary, or instructions
-- Start directly with the greeting and end with the closing signature"""
+- Start directly with the content
+- Output should be ready to use as-is"""
 
     import time
     
@@ -152,13 +175,13 @@ def _build_context_section(context: dict) -> str:
     context_parts = []
     
     if context.get("recipient"):
-        context_parts.append(f"Recipient: {context['recipient']}")
-    if context.get("subject"):
-        context_parts.append(f"Subject: {context['subject']}")
-    if context.get("tone"):
-        context_parts.append(f"Tone: {context['tone']}")
+        context_parts.append(f"Recipient/Audience: {context['recipient']}")
     if context.get("purpose"):
         context_parts.append(f"Purpose: {context['purpose']}")
+    if context.get("length"):
+        context_parts.append(f"Length: {context['length']}")
+    if context.get("style"):
+        context_parts.append(f"Style: {context['style']}")
     if context.get("additional_info"):
         context_parts.append(f"Additional Information: {context['additional_info']}")
     
@@ -172,18 +195,43 @@ def main():
         print(json.dumps({"error": "No prompt provided"}))
         sys.exit(1)
     
-    prompt = sys.argv[1]
+    # Parse the prompt (it comes JSON-stringified from Electron)
+    try:
+        prompt = json.loads(sys.argv[1])
+    except json.JSONDecodeError as e:
+        # If not valid JSON, try stripping quotes and parsing again
+        try:
+            # Windows command line might add extra quotes
+            cleaned = sys.argv[1].strip('"').strip("'")
+            prompt = json.loads(cleaned)
+        except:
+            # If still fails, use as-is
+            prompt = sys.argv[1]
+            print(f"DEBUG: Using prompt as-is (not JSON): {prompt[:50]}...", file=sys.stderr)
+    
     context = None
     
     # Try to parse context if provided as second argument
     if len(sys.argv) > 2:
         try:
             context = json.loads(sys.argv[2])
-        except:
-            pass
+            print(f"DEBUG: Context received: {context}", file=sys.stderr)
+        except json.JSONDecodeError as e:
+            # Try stripping quotes that Windows might add
+            try:
+                cleaned = sys.argv[2].strip('"').strip("'")
+                context = json.loads(cleaned)
+                print(f"DEBUG: Context received (after cleaning): {context}", file=sys.stderr)
+            except Exception as e2:
+                print(f"DEBUG: Failed to parse context: {e2}", file=sys.stderr)
+                print(f"DEBUG: Raw context arg: {repr(sys.argv[2])}", file=sys.stderr)
+                pass
     
-    email = generate_professional_email(prompt, context)
-    print(json.dumps({"email": email}))
+    print(f"DEBUG: Prompt: {prompt[:50]}...", file=sys.stderr)
+    print(f"DEBUG: Tone: {context.get('tone') if context else 'default'}", file=sys.stderr)
+    
+    text = generate_text(prompt, context)
+    print(json.dumps({"text": text}))
 
 if __name__ == "__main__":
     main()

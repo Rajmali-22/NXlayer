@@ -11,11 +11,21 @@
         <!-- Input area at bottom -->
         <div class="input-container">
             <div class="input-wrapper">
+                <select id="tone-select" class="tone-select">
+                    <option value="professional">Professional</option>
+                    <option value="casual">Casual</option>
+                    <option value="friendly">Friendly</option>
+                    <option value="formal">Formal</option>
+                    <option value="creative">Creative</option>
+                    <option value="technical">Technical</option>
+                    <option value="persuasive">Persuasive</option>
+                    <option value="concise">Concise</option>
+                </select>
                 <input 
                     type="text" 
                     id="prompt-input" 
                     class="prompt-input" 
-                    placeholder="Describe your email request... (Press Ctrl+Shift+Space to toggle)"
+                    placeholder="Describe what you want to write... (Press Ctrl+Shift+Space to toggle)"
                     autocomplete="off"
                 />
                 <button id="generate-btn" class="generate-btn">Generate</button>

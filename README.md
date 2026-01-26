@@ -1,10 +1,10 @@
-# AI Text Bot - Email Completion Assistant
+# AI Text Bot - Text Generation Assistant
 
-An AI-powered email completion bot with a transparent overlay interface that helps you write professional emails using Google's Gemini API.
+An AI-powered text generation bot with a transparent overlay interface that helps you write any type of text content using Mistral AI.
 
 ## Features
 
-- 🤖 **AI-Powered Email Generation**: Uses Google Gemini API to generate professional emails
+- 🤖 **AI-Powered Text Generation**: Uses Mistral AI to generate text in various tones and styles
 - 🪟 **Transparent Overlay**: Non-intrusive transparent window that stays on top
 - ⌨️ **Quick Paste**: Press Tab to accept and paste generated text at your cursor position
 - 🎯 **Smart Positioning**: Output appears near your cursor position
@@ -16,6 +16,17 @@ An AI-powered email completion bot with a transparent overlay interface that hel
 - **Node.js 16+** and npm
 - **Rust** (optional but recommended for fast keyboard injection) - Get from [rustup.rs](https://rustup.rs/)
 - **Mistral AI API Key**: Get one from [Mistral AI Console](https://console.mistral.ai/api-keys/)
+
+## Available Tones
+
+- **Professional**: Formal, respectful, business-appropriate
+- **Casual**: Friendly, relaxed, conversational
+- **Friendly**: Warm, approachable, positive
+- **Formal**: Very formal, official language
+- **Creative**: Expressive, engaging, imaginative
+- **Technical**: Precise, clear, jargon-appropriate
+- **Persuasive**: Compelling, convincing arguments
+- **Concise**: Brief, direct, to-the-point
 
 ## Setup Instructions
 
@@ -94,24 +105,26 @@ npm start
 ## Usage
 
 1. **Toggle Window**: Press `Ctrl+Shift+Space` (or `Cmd+Shift+Space` on macOS) to show/hide the overlay
-2. **Enter Prompt**: Type your email request, e.g., "Write an email to my boss requesting time off next week"
-3. **Generate**: Press Enter or click the Generate button
-4. **Review**: The generated email will appear in a transparent floating window at the top-left
-5. **Accept**: Press `Ctrl+Shift+P` to accept and paste the text at your current cursor position (uses fast Rust-based injection)
-6. **Close**: Press `Escape` or click the × button to close the output without pasting
+2. **Select Tone**: Choose the tone/style from the dropdown (Professional, Casual, Friendly, etc.)
+3. **Enter Prompt**: Type your request, e.g., "Write a message to my team about the project update"
+4. **Generate**: Press Enter or click the Generate button
+5. **Review**: The generated text will appear in a transparent floating window at the top-left
+6. **Accept**: Press `Ctrl+Shift+P` to accept and paste the text at your current cursor position (uses fast Rust-based injection)
+7. **Close**: Press `Escape` or click the × button to close the output without pasting
 
 ## Example Prompts
 
-- "Write a professional email to schedule a meeting with the client"
-- "Draft an email to my team about the project deadline extension"
-- "Create a follow-up email after a job interview"
-- "Write a thank you email to a colleague"
+- "Write a message to my boss requesting time off next week" (Professional tone)
+- "Create a casual update about the project progress" (Casual tone)
+- "Draft a friendly reminder about the team meeting" (Friendly tone)
+- "Write a technical explanation of how the new feature works" (Technical tone)
+- "Create a persuasive pitch for the new product idea" (Persuasive tone)
 
 ## Project Structure
 
 ```
 ai-text-bot/
-├── email_ai_backend.py    # Python backend for Gemini API
+├── email_ai_backend.py    # Python backend for Mistral AI
 ├── main.js                # Electron main process
 ├── index.html             # UI structure
 ├── styles.css             # Styling

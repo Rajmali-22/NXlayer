@@ -36,6 +36,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function handleGenerate() {
     const prompt = promptInput.value.trim();
+    const toneSelect = document.getElementById('tone-select');
+    const tone = toneSelect ? toneSelect.value : 'professional';
+    
+    console.log('=== Frontend: Generate Request ===');
+    console.log('Prompt:', prompt);
+    console.log('Selected Tone:', tone);
     
     if (!prompt) {
         showStatus('Please enter a prompt', 'error');
@@ -43,20 +49,22 @@ async function handleGenerate() {
     }
 
     generateBtn.disabled = true;
-    showStatus('Generating email...', 'loading');
+    showStatus('Generating text...', 'loading');
     hideOutput();
 
     try {
-        const result = await ipcRenderer.invoke('generate-email', prompt);
+        const context = { tone: tone };
+        console.log('Sending to main process - Prompt:', prompt, 'Context:', context);
+        const result = await ipcRenderer.invoke('generate-text', prompt, context);
         
         if (result.error) {
             showStatus('Error: ' + result.error, 'error');
-        } else if (result.email) {
-            currentGeneratedText = result.email;
+        } else if (result.text) {
+            currentGeneratedText = result.text;
             // Send to main process for global shortcut
-            ipcRenderer.send('set-generated-text', result.email);
-            displayOutput(result.email);
-            showStatus('Email generated! Press Ctrl+Shift+P to accept and paste', 'success');
+            ipcRenderer.send('set-generated-text', result.text);
+            displayOutput(result.text);
+            showStatus('Text generated! Press Ctrl+Shift+P to accept and paste', 'success');
             
             // Focus back on input
             promptInput.focus();

@@ -259,14 +259,33 @@ app.on('window-all-closed', () => {
   }
 });
 
-// IPC handler for generating email
-ipcMain.handle('generate-email', async (event, prompt, context) => {
+// IPC handler for generating text
+ipcMain.handle('generate-text', async (event, prompt, context) => {
   return new Promise((resolve, reject) => {
-    const pythonScript = path.join(__dirname, 'email_ai_backend.py');
-    const args = [pythonScript, prompt];
+    console.log('=== Text Generation Request ===');
+    console.log('Prompt:', prompt);
+    console.log('Context:', JSON.stringify(context));
     
-    if (context) {
-      args.push(JSON.stringify(context));
+    const pythonScript = path.join(__dirname, 'text_ai_backend.py');
+    
+    // Pass prompt and context as JSON strings for proper parsing
+    // Python will parse them as JSON
+    // Use JSON.stringify to ensure proper escaping, then wrap in quotes for Windows command line
+    const promptJson = JSON.stringify(prompt);
+    const args = [pythonScript, promptJson];
+    
+    if (context && Object.keys(context).length > 0) {
+      const contextJson = JSON.stringify(context);
+      args.push(contextJson);
+      console.log('Context passed to Python:', contextJson);
+    } else {
+      console.log('No context provided');
+    }
+    
+    console.log('Python command args:', args);
+    console.log('Prompt JSON:', promptJson);
+    if (context && Object.keys(context).length > 0) {
+      console.log('Context JSON:', JSON.stringify(context));
     }
 
     // Try to read API key from config file and pass as environment variable
@@ -304,7 +323,21 @@ ipcMain.handle('generate-email', async (event, prompt, context) => {
       }
     }
 
-    const pythonProcess = spawn('python', args, {
+    // On Windows, we need to properly escape JSON for command line
+    // Use a more reliable method: pass JSON via stdin or properly escape
+    // For now, let's ensure proper escaping by double-quoting the JSON strings
+    const escapedArgs = args.map(arg => {
+      // If it's a JSON string (starts with { or [), wrap it in quotes
+      if ((arg.startsWith('{') || arg.startsWith('[')) && !arg.startsWith('"')) {
+        // Escape inner quotes and wrap in double quotes
+        return '"' + arg.replace(/"/g, '\\"') + '"';
+      }
+      return arg;
+    });
+    
+    console.log('Escaped args for Windows:', escapedArgs);
+    
+    const pythonProcess = spawn('python', escapedArgs, {
       cwd: __dirname,
       shell: true,
       env: env

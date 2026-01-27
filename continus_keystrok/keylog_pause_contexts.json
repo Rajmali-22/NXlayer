@@ -1,0 +1,183 @@
+{
+  "pause_contexts": [
+    {
+      "app_name": "Email - KULKARNI AMAR MILIND - Outlook - Opera",
+      "window_title": "Email - KULKARNI AMAR MILIND - Outlook - Opera",
+      "process_name": "unknown",
+      "start_time": "2026-01-26T21:36:17.768392",
+      "end_time": "2026-01-26T21:36:21.099967",
+      "duration_seconds": 3.33,
+      "keystrokes": {
+        "raw": "<BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE>i am ",
+        "final_text": "i am ",
+        "total_keys": 27,
+        "backspaces": 22,
+        "corrections": []
+      },
+      "pause_detected_at": "2026-01-26T21:36:21.099967",
+      "pause_duration": 1.41
+    },
+    {
+      "app_name": "Email - KULKARNI AMAR MILIND - Outlook - Opera",
+      "window_title": "Email - KULKARNI AMAR MILIND - Outlook - Opera",
+      "process_name": "unknown",
+      "start_time": "2026-01-26T21:36:17.768392",
+      "end_time": "2026-01-26T21:37:41.859586",
+      "duration_seconds": 84.09,
+      "keystrokes": {
+        "raw": "<BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE><BACKSPACE>i am ill f<BACKSPACE>draft an email to my prof",
+        "final_text": "i am ill draft an email to my prof",
+        "total_keys": 58,
+        "backspaces": 23,
+        "corrections": [
+          {
+            "timestamp": "2026-01-26T21:36:22.200839",
+            "position": 9,
+            "deleted": "f",
+            "reason": "backspace"
+          }
+        ]
+      },
+      "pause_detected_at": "2026-01-26T21:37:41.859586",
+      "pause_duration": 76.18
+    },
+    {
+      "app_name": "Meet - sob-fgbp-rur - Opera",
+      "window_title": "Meet - sob-fgbp-rur - Opera",
+      "process_name": "unknown",
+      "start_time": "2026-01-26T21:37:41.863041",
+      "end_time": "2026-01-26T21:38:37.658551",
+      "duration_seconds": 55.8,
+      "keystrokes": {
+        "raw": "all is hell\nsaong<BACKSPACE><BACKSPACE>sin<BACKSPACE><BACKSPACE>i<BACKSPACE>ong\n",
+        "final_text": "all is hell\nsaosong\n",
+        "total_keys": 30,
+        "backspaces": 5,
+        "corrections": [
+          {
+            "timestamp": "2026-01-26T21:37:45.306798",
+            "position": 16,
+            "deleted": "g",
+            "reason": "backspace"
+          },
+          {
+            "timestamp": "2026-01-26T21:37:45.455416",
+            "position": 15,
+            "deleted": "n",
+            "reason": "backspace"
+          },
+          {
+            "timestamp": "2026-01-26T21:37:46.609482",
+            "position": 17,
+            "deleted": "n",
+            "reason": "backspace"
+          },
+          {
+            "timestamp": "2026-01-26T21:37:46.773712",
+            "position": 16,
+            "deleted": "i",
+            "reason": "backspace"
+          },
+          {
+            "timestamp": "2026-01-26T21:37:47.786407",
+            "position": 16,
+            "deleted": "i",
+            "reason": "backspace"
+          }
+        ]
+      },
+      "pause_detected_at": "2026-01-26T21:38:37.658551",
+      "pause_duration": 48.79
+    },
+    {
+      "app_name": "Meet - sob-fgbp-rur - Opera",
+      "window_title": "Meet - sob-fgbp-rur - Opera",
+      "process_name": "unknown",
+      "start_time": "2026-01-26T21:37:41.863041",
+      "end_time": "2026-01-26T21:38:50.267374",
+      "duration_seconds": 68.4,
+      "keystrokes": {
+        "raw": "all is hell\nsaong<BACKSPACE><BACKSPACE>sin<BACKSPACE><BACKSPACE>i<BACKSPACE>ong\nhave you listened to it<SHIFT>?\n",
+        "final_text": "all is hell\nsaosong\nhave you listened to it?\n",
+        "total_keys": 56,
+        "backspaces": 5,
+        "corrections": [
+          {
+            "timestamp": "2026-01-26T21:37:45.306798",
+            "position": 16,
+            "deleted": "g",
+            "reason": "backspace"
+          },
+          {
+            "timestamp": "2026-01-26T21:37:45.455416",
+            "position": 15,
+            "deleted": "n",
+            "reason": "backspace"
+          },
+          {
+            "timestamp": "2026-01-26T21:37:46.609482",
+            "position": 17,
+            "deleted": "n",
+            "reason": "backspace"
+          },
+          {
+            "timestamp": "2026-01-26T21:37:46.773712",
+            "position": 16,
+            "deleted": "i",
+            "reason": "backspace"
+          },
+          {
+            "timestamp": "2026-01-26T21:37:47.786407",
+            "position": 16,
+            "deleted": "i",
+            "reason": "backspace"
+          }
+        ]
+      },
+      "pause_detected_at": "2026-01-26T21:38:50.267374",
+      "pause_duration": 8.54
+    }
+  ],
+  "metadata": {
+    "total_pauses": 4,
+    "pause_threshold_seconds": 1.0,
+    "last_updated": "2026-01-26T21:38:50.384449"
+  },
+  "api_request_log": [
+    {
+      "timestamp": "2026-01-26T21:36:21.099967",
+      "endpoint": "http://localhost:8000/api/suggest",
+      "payload_size": 582,
+      "app_context": "Email - KULKARNI AMAR MILIND - Outlook - Opera",
+      "status": "SIMULATED_SUCCESS"
+    },
+    {
+      "timestamp": "2026-01-26T21:37:41.859586",
+      "endpoint": "http://localhost:8000/api/suggest",
+      "payload_size": 653,
+      "app_context": "Email - KULKARNI AMAR MILIND - Outlook - Opera",
+      "status": "SIMULATED_SUCCESS"
+    },
+    {
+      "timestamp": "2026-01-26T21:38:37.658551",
+      "endpoint": "http://localhost:8000/api/suggest",
+      "payload_size": 395,
+      "app_context": "Meet - sob-fgbp-rur - Opera",
+      "status": "SIMULATED_SUCCESS"
+    },
+    {
+      "timestamp": "2026-01-26T21:38:50.267374",
+      "endpoint": "http://localhost:8000/api/suggest",
+      "payload_size": 454,
+      "app_context": "Meet - sob-fgbp-rur - Opera",
+      "status": "SIMULATED_SUCCESS"
+    },
+    {
+      "timestamp": "2026-01-26T21:38:50.267374",
+      "endpoint": "http://localhost:8000/api/suggest",
+      "payload_size": 454,
+      "app_context": "Meet - sob-fgbp-rur - Opera",
+      "status": "SIMULATED_SUCCESS"
+    }
+  ]
+}

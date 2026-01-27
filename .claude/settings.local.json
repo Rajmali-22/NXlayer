@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm start)",
+      "Bash(dir \"C:\\\\Users\\\\rajma\\\\Desktop\\\\zenth\\\\ai-text-bot\")",
+      "Bash(cargo build:*)"
+    ]
+  }
+}

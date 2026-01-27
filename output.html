@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generated Email</title>
+    <title>Suggestion</title>
     <style>
         * {
             margin: 0;
@@ -12,139 +12,94 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: rgba(30, 30, 30, 0.85);
-            backdrop-filter: blur(20px);
-            border-radius: 12px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            background: rgba(40, 40, 40, 0.95);
+            border: 1px solid rgba(100, 100, 100, 0.5);
+            border-radius: 6px;
             overflow: hidden;
-            -webkit-app-region: drag;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
         }
 
-        .output-content {
+        .suggestion-box {
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            max-height: 100vh;
         }
 
-        .output-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 16px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-            color: rgba(255, 255, 255, 0.95);
+        .suggestion-text {
+            padding: 8px 10px;
+            color: rgba(200, 200, 200, 0.95);
             font-size: 13px;
-            font-weight: 600;
-            -webkit-app-region: no-drag;
-            background: rgba(0, 0, 0, 0.3);
-        }
-
-        .close-btn {
-            background: none;
-            border: none;
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 24px;
-            cursor: pointer;
-            padding: 0;
-            width: 24px;
-            height: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 4px;
-            transition: all 0.2s;
-            -webkit-app-region: no-drag;
-        }
-
-        .close-btn:hover {
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
-        }
-
-        .output-text {
-            padding: 16px;
-            color: rgba(255, 255, 255, 0.95);
-            font-size: 14px;
-            line-height: 1.6;
+            line-height: 1.4;
             white-space: pre-wrap;
             word-wrap: break-word;
             overflow-y: auto;
-            flex: 1;
-            -webkit-app-region: no-drag;
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 8px;
-            margin: 8px;
+            max-height: calc(100vh - 28px);
         }
 
-        .output-text::-webkit-scrollbar {
-            width: 8px;
+        .suggestion-text::-webkit-scrollbar {
+            width: 6px;
         }
 
-        .output-text::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 4px;
+        .suggestion-text::-webkit-scrollbar-track {
+            background: transparent;
         }
 
-        .output-text::-webkit-scrollbar-thumb {
+        .suggestion-text::-webkit-scrollbar-thumb {
             background: rgba(255, 255, 255, 0.2);
-            border-radius: 4px;
+            border-radius: 3px;
         }
 
-        .output-text::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-
-        .output-footer {
-            padding: 10px 16px;
-            border-top: 1px solid rgba(255, 255, 255, 0.2);
-            background: rgba(0, 0, 0, 0.3);
-            -webkit-app-region: no-drag;
+        .hint-bar {
+            padding: 4px 10px;
+            background: rgba(60, 60, 60, 0.9);
+            border-top: 1px solid rgba(80, 80, 80, 0.5);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .hint {
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 12px;
+            color: rgba(150, 150, 150, 0.9);
+            font-size: 10px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
 
         kbd {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 4px;
-            padding: 2px 6px;
-            font-family: monospace;
-            font-size: 11px;
-            margin: 0 2px;
+            background: rgba(80, 80, 80, 0.8);
+            border: 1px solid rgba(100, 100, 100, 0.5);
+            border-radius: 3px;
+            padding: 1px 4px;
+            font-family: inherit;
+            font-size: 10px;
+            color: #4fc3f7;
+        }
+
+        .esc {
+            color: rgba(120, 120, 120, 0.8);
+            font-size: 10px;
         }
     </style>
 </head>
 <body>
-    <div class="output-content">
-        <div class="output-header">
-            <span>Generated Text</span>
-            <button id="close-output" class="close-btn">×</button>
-        </div>
-        <div id="output-text" class="output-text"></div>
-        <div class="output-footer">
-            <span class="hint">Press <kbd>Ctrl+Shift+P</kbd> in main window to accept and paste</span>
+    <div class="suggestion-box">
+        <div id="suggestion-text" class="suggestion-text"></div>
+        <div class="hint-bar">
+            <span class="hint"><kbd>Ctrl+Shift+P</kbd> paste</span>
+            <span class="esc">Esc close</span>
         </div>
     </div>
 
     <script>
         const { ipcRenderer } = require('electron');
-        
-        const outputText = document.getElementById('output-text');
-        const closeBtn = document.getElementById('close-output');
-        
+
+        const suggestionText = document.getElementById('suggestion-text');
+
         // Listen for text to display
         ipcRenderer.on('display-text', (event, text) => {
-            outputText.textContent = text;
+            suggestionText.textContent = text;
         });
-        
-        // Close button
-        closeBtn.addEventListener('click', () => {
-            ipcRenderer.invoke('hide-output');
-        });
-        
+
         // Escape key to close
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {

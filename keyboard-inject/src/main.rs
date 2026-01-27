@@ -90,9 +90,11 @@ fn get_virtual_key(ch: char) -> (u8, bool) {
 
 fn unescape_newlines(text: &str) -> String {
     // Replace literal \n sequences with actual newlines
+    // Convert tabs to spaces to avoid field navigation in Outlook/rich editors
     text.replace("\\n", "\n")
         .replace("\\r", "\r")
-        .replace("\\t", "\t")
+        .replace("\\t", "    ")  // Convert tabs to 4 spaces
+        .replace("\t", "    ")   // Also handle actual tab characters
 }
 
 fn main() {

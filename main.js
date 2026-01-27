@@ -73,45 +73,32 @@ function createWindow() {
 }
 
 function createOutputWindow() {
-  const { screen } = require('electron');
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width } = primaryDisplay.workAreaSize;
-  
-  // Create a separate floating window for output at top left
+  // Create a compact inline suggestion popup (like autocomplete)
   outputWindow = new BrowserWindow({
-    width: 600,
-    height: 400,
+    width: 450,
+    height: 180,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
-    resizable: true,
+    resizable: false,
     minimizable: false,
     maximizable: false,
     closable: false,
-    opacity: 0.95,
+    focusable: false,  // Don't steal focus from target app
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
       enableRemoteModule: true
-    },
-    // Position at top left of screen
-    x: 20,
-    y: 20
+    }
   });
 
-  // Load a simple HTML for the output window
   outputWindow.loadFile('output.html');
-  
-  // Initially hidden
   outputWindow.hide();
-  
+
   outputWindow.on('closed', () => {
     outputWindow = null;
   });
-  
-  // Make it draggable
-  outputWindow.setIgnoreMouseEvents(false);
 }
 
 // Register global shortcut to toggle window (Ctrl+Shift+Space)
@@ -147,53 +134,42 @@ app.whenReady().then(() => {
       if (outputWindow) {
         outputWindow.hide();
       }
-      
+
       // Use Rust-based keyboard injection
       const rustInjectPath = path.join(__dirname, 'keyboard-inject', 'target', 'release', 'keyboard-inject.exe');
       const fs = require('fs');
-      
+
       // Also check for debug build (in case release wasn't built)
       const rustInjectPathDebug = path.join(__dirname, 'keyboard-inject', 'target', 'debug', 'keyboard-inject.exe');
-      const actualPath = fs.existsSync(rustInjectPath) ? rustInjectPath : 
+      const actualPath = fs.existsSync(rustInjectPath) ? rustInjectPath :
                         (fs.existsSync(rustInjectPathDebug) ? rustInjectPathDebug : null);
-      
+
       if (actualPath) {
         try {
-          // Hide windows first
-          if (mainWindow) {
-            mainWindow.hide();
-            isWindowVisible = false;
-          }
-          if (outputWindow) {
-            outputWindow.hide();
-          }
-          
           // Small delay to ensure focus is on target app
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
+          await new Promise(resolve => setTimeout(resolve, 150));
+
           // Escape the text for command line
-          // Replace newlines with spaces and escape quotes for Windows command line
-          // The Rust code will handle unescaping \n sequences
           let escapedText = lastGeneratedText
             .replace(/\\/g, '\\\\')  // Escape backslashes first
             .replace(/"/g, '\\"')     // Escape quotes
             .replace(/\n/g, '\\n')   // Convert newlines to \n strings
             .replace(/\r/g, '\\r')   // Convert carriage returns to \r strings
-            .replace(/\t/g, '\\t');  // Convert tabs to \t strings
-          
+            .replace(/\t/g, '\\t');  // Convert tabs to \t strings (Rust will convert to spaces)
+
           // Wrap in quotes for command line
           escapedText = `"${escapedText}"`;
-          
+
           // Call Rust injector - pass text as argument
           const { exec } = require('child_process');
           const command = `"${actualPath}" ${escapedText}`;
-          
+
           exec(command, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
             if (error) {
               console.error('Rust injection error:', error);
               console.warn('Falling back to clipboard method...');
-              
-              // Fallback 1: Try clipboard + robotjs Ctrl+V
+
+              // Fallback: clipboard + Ctrl+V
               try {
                 clipboard.writeText(lastGeneratedText);
                 if (robot) {
@@ -203,83 +179,34 @@ app.whenReady().then(() => {
                       console.log('Fallback: Text pasted via clipboard + Ctrl+V');
                     } catch (robotError) {
                       console.error('robotjs paste failed:', robotError);
-                      console.warn('Text copied to clipboard. Please press Ctrl+V manually.');
                     }
                   }, 50);
-                } else {
-                  console.warn('robotjs not available. Text copied to clipboard. Please press Ctrl+V manually.');
                 }
               } catch (clipError) {
                 console.error('Clipboard write failed:', clipError);
-                console.error('All injection methods failed. Text could not be pasted.');
               }
-              
-              lastGeneratedText = ''; // Clear after fallback attempt
+              lastGeneratedText = '';
             } else {
-              // Success - clear the text
               console.log('Rust injection successful');
               lastGeneratedText = '';
             }
           });
         } catch (error) {
           console.error('Rust injection error:', error);
-          console.warn('Falling back to clipboard method...');
-          
-          // Fallback: Try clipboard + robotjs Ctrl+V
-          try {
-            clipboard.writeText(lastGeneratedText);
-            if (robot) {
-              await new Promise(resolve => setTimeout(resolve, 50));
-              try {
-                robot.keyTap('v', 'control');
-                console.log('Fallback: Text pasted via clipboard + Ctrl+V');
-              } catch (robotError) {
-                console.error('robotjs paste failed:', robotError);
-                console.warn('Text copied to clipboard. Please press Ctrl+V manually.');
-              }
-            } else {
-              console.warn('robotjs not available. Text copied to clipboard. Please press Ctrl+V manually.');
-            }
-          } catch (clipError) {
-            console.error('Clipboard write failed:', clipError);
-            console.error('All injection methods failed. Text could not be pasted.');
-          }
-          
           lastGeneratedText = '';
         }
       } else {
-        // Rust injector not built, fallback to clipboard
-        console.warn('═══════════════════════════════════════════════════════');
-        console.warn('Rust injector not found!');
-        console.warn('To build it:');
-        console.warn('  1. Install Rust from https://rustup.rs/');
-        console.warn('  2. Run: cd keyboard-inject && cargo build --release');
-        console.warn('  3. Restart this app');
-        console.warn('');
-        console.warn('Using clipboard fallback (Ctrl+V) for now.');
-        console.warn('See BUILD_RUST.md for detailed instructions.');
-        console.warn('═══════════════════════════════════════════════════════');
-        
-        // Fallback: Try clipboard + robotjs Ctrl+V
+        // Rust injector not built - fallback to clipboard
+        console.warn('Rust injector not found. Using clipboard fallback.');
         try {
           clipboard.writeText(lastGeneratedText);
           if (robot) {
             await new Promise(resolve => setTimeout(resolve, 50));
-            try {
-              robot.keyTap('v', 'control');
-              console.log('Fallback: Text pasted via clipboard + Ctrl+V');
-            } catch (robotError) {
-              console.error('robotjs paste failed:', robotError);
-              console.warn('Text copied to clipboard. Please press Ctrl+V manually.');
-            }
-          } else {
-            console.warn('robotjs not available. Text copied to clipboard. Please press Ctrl+V manually.');
+            robot.keyTap('v', 'control');
           }
-        } catch (clipError) {
-          console.error('Clipboard write failed:', clipError);
-          console.error('All injection methods failed. Text could not be pasted.');
+        } catch (err) {
+          console.error('Fallback failed:', err);
         }
-        
         lastGeneratedText = '';
       }
     }
@@ -424,15 +351,70 @@ ipcMain.handle('generate-text', async (event, prompt, context) => {
   });
 });
 
-// IPC handler for showing output in output window
+// IPC handler for showing inline suggestion at cursor
+ipcMain.handle('show-inline-suggestion', async (event, text) => {
+  if (outputWindow) {
+    const { screen } = require('electron');
+
+    // Get cursor position (mouse position as proxy for text cursor)
+    const cursor = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(cursor);
+    const workArea = display.workArea;
+
+    // Get window dimensions
+    const [popupWidth, popupHeight] = outputWindow.getSize();
+
+    // Position inline - just below cursor like autocomplete
+    let x = cursor.x;
+    let y = cursor.y + 20;  // Small offset below cursor
+
+    // Keep on screen - flip above if needed
+    if (y + popupHeight > workArea.y + workArea.height) {
+      y = cursor.y - popupHeight - 5;
+    }
+
+    // Keep on screen - adjust horizontal
+    if (x + popupWidth > workArea.x + workArea.width) {
+      x = workArea.x + workArea.width - popupWidth - 10;
+    }
+
+    x = Math.max(workArea.x, x);
+    y = Math.max(workArea.y, y);
+
+    outputWindow.setPosition(Math.round(x), Math.round(y));
+    outputWindow.showInactive();  // Show without stealing focus
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+    outputWindow.webContents.send('display-text', text);
+  }
+});
+
+// IPC handler for showing output in output window (legacy - redirects to inline)
 ipcMain.handle('show-output', async (event, text) => {
   if (outputWindow) {
-    // Wait for window to be ready before sending message
-    outputWindow.show();
-    outputWindow.focus();
-    
-    // Small delay to ensure window is ready
-    await new Promise(resolve => setTimeout(resolve, 100));
+    const { screen } = require('electron');
+    const cursor = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(cursor);
+    const workArea = display.workArea;
+    const [popupWidth, popupHeight] = outputWindow.getSize();
+
+    let x = cursor.x;
+    let y = cursor.y + 20;
+
+    if (y + popupHeight > workArea.y + workArea.height) {
+      y = cursor.y - popupHeight - 5;
+    }
+    if (x + popupWidth > workArea.x + workArea.width) {
+      x = workArea.x + workArea.width - popupWidth - 10;
+    }
+
+    x = Math.max(workArea.x, x);
+    y = Math.max(workArea.y, y);
+
+    outputWindow.setPosition(Math.round(x), Math.round(y));
+    outputWindow.showInactive();
+
+    await new Promise(resolve => setTimeout(resolve, 50));
     outputWindow.webContents.send('display-text', text);
   }
 });
@@ -450,6 +432,82 @@ let lastGeneratedText = '';
 // IPC handler to store generated text for global shortcut
 ipcMain.on('set-generated-text', (event, text) => {
   lastGeneratedText = text;
+});
+
+// IPC handler for inline text injection using Rust injector
+ipcMain.handle('inject-text', async (event, text) => {
+  try {
+    // Hide main window to allow focus on target app
+    if (mainWindow) {
+      mainWindow.hide();
+      isWindowVisible = false;
+    }
+    if (outputWindow) {
+      outputWindow.hide();
+    }
+
+    // Small delay to ensure focus is on the target application
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    // Use Rust-based keyboard injection
+    const rustInjectPath = path.join(__dirname, 'keyboard-inject', 'target', 'release', 'keyboard-inject.exe');
+    const fs = require('fs');
+    const rustInjectPathDebug = path.join(__dirname, 'keyboard-inject', 'target', 'debug', 'keyboard-inject.exe');
+    const actualPath = fs.existsSync(rustInjectPath) ? rustInjectPath :
+                      (fs.existsSync(rustInjectPathDebug) ? rustInjectPathDebug : null);
+
+    if (actualPath) {
+      return new Promise((resolve) => {
+        // Escape the text for command line
+        let escapedText = text
+          .replace(/\\/g, '\\\\')
+          .replace(/"/g, '\\"')
+          .replace(/\n/g, '\\n')
+          .replace(/\r/g, '\\r')
+          .replace(/\t/g, '\\t');
+
+        escapedText = `"${escapedText}"`;
+
+        const { exec } = require('child_process');
+        const command = `"${actualPath}" ${escapedText}`;
+
+        exec(command, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+          if (error) {
+            console.error('Rust injection error:', error);
+            // Fallback to clipboard
+            try {
+              clipboard.writeText(text);
+              if (robot) {
+                setTimeout(() => {
+                  robot.keyTap('v', 'control');
+                  resolve({ success: true, method: 'clipboard-fallback' });
+                }, 50);
+              } else {
+                resolve({ success: true, method: 'clipboard', message: 'Press Ctrl+V to paste' });
+              }
+            } catch (clipError) {
+              resolve({ success: false, error: clipError.message });
+            }
+          } else {
+            console.log('Rust injection successful');
+            resolve({ success: true, method: 'keyboard-inject' });
+          }
+        });
+      });
+    } else {
+      // Fallback to clipboard
+      clipboard.writeText(text);
+      if (robot) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        robot.keyTap('v', 'control');
+        return { success: true, method: 'clipboard-fallback' };
+      }
+      return { success: true, method: 'clipboard', message: 'Press Ctrl+V to paste' };
+    }
+  } catch (error) {
+    console.error('Inject text error:', error);
+    return { success: false, error: error.message };
+  }
 });
 
 // IPC handler for typing text at cursor position

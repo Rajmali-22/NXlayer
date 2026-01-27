@@ -94,7 +94,7 @@ IMPORTANT:
 - Do NOT include titles, headers, or subject lines unless specifically requested
 - Do not include any explanations, meta-commentary, or instructions
 - Start directly with the content
-- Output should be ready to use as-is"""/
+- Output should be ready to use as-is"""
 
     import time
     
@@ -166,9 +166,9 @@ IMPORTANT:
                 return "Error: Invalid API key. Please check your MISTRAL_API_KEY."
             
             # Generic error
-            return f"Error generating email: {error_str}"
-    
-    return "Error: Failed to generate email after multiple attempts."
+            return f"Error generating text: {error_str}"
+
+    return "Error: Failed to generate text after multiple attempts."
 
 def _build_context_section(context: dict) -> str:
     """Build context section for the prompt."""

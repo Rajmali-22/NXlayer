@@ -191,21 +191,60 @@ app.whenReady().then(() => {
           exec(command, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
             if (error) {
               console.error('Rust injection error:', error);
-              // Fallback to clipboard
-              clipboard.writeText(lastGeneratedText);
-              if (robot) {
-                setTimeout(() => {
-                  robot.keyTap('v', 'control');
-                }, 50);
+              console.warn('Falling back to clipboard method...');
+              
+              // Fallback 1: Try clipboard + robotjs Ctrl+V
+              try {
+                clipboard.writeText(lastGeneratedText);
+                if (robot) {
+                  setTimeout(() => {
+                    try {
+                      robot.keyTap('v', 'control');
+                      console.log('Fallback: Text pasted via clipboard + Ctrl+V');
+                    } catch (robotError) {
+                      console.error('robotjs paste failed:', robotError);
+                      console.warn('Text copied to clipboard. Please press Ctrl+V manually.');
+                    }
+                  }, 50);
+                } else {
+                  console.warn('robotjs not available. Text copied to clipboard. Please press Ctrl+V manually.');
+                }
+              } catch (clipError) {
+                console.error('Clipboard write failed:', clipError);
+                console.error('All injection methods failed. Text could not be pasted.');
               }
+              
+              lastGeneratedText = ''; // Clear after fallback attempt
+            } else {
+              // Success - clear the text
+              console.log('Rust injection successful');
+              lastGeneratedText = '';
             }
           });
-          
-          lastGeneratedText = ''; // Clear after pasting
         } catch (error) {
           console.error('Rust injection error:', error);
-          // Fallback to clipboard
-          clipboard.writeText(lastGeneratedText);
+          console.warn('Falling back to clipboard method...');
+          
+          // Fallback: Try clipboard + robotjs Ctrl+V
+          try {
+            clipboard.writeText(lastGeneratedText);
+            if (robot) {
+              await new Promise(resolve => setTimeout(resolve, 50));
+              try {
+                robot.keyTap('v', 'control');
+                console.log('Fallback: Text pasted via clipboard + Ctrl+V');
+              } catch (robotError) {
+                console.error('robotjs paste failed:', robotError);
+                console.warn('Text copied to clipboard. Please press Ctrl+V manually.');
+              }
+            } else {
+              console.warn('robotjs not available. Text copied to clipboard. Please press Ctrl+V manually.');
+            }
+          } catch (clipError) {
+            console.error('Clipboard write failed:', clipError);
+            console.error('All injection methods failed. Text could not be pasted.');
+          }
+          
           lastGeneratedText = '';
         }
       } else {
@@ -220,11 +259,27 @@ app.whenReady().then(() => {
         console.warn('Using clipboard fallback (Ctrl+V) for now.');
         console.warn('See BUILD_RUST.md for detailed instructions.');
         console.warn('═══════════════════════════════════════════════════════');
-        clipboard.writeText(lastGeneratedText);
-        if (robot) {
-          await new Promise(resolve => setTimeout(resolve, 50));
-          robot.keyTap('v', 'control');
+        
+        // Fallback: Try clipboard + robotjs Ctrl+V
+        try {
+          clipboard.writeText(lastGeneratedText);
+          if (robot) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+            try {
+              robot.keyTap('v', 'control');
+              console.log('Fallback: Text pasted via clipboard + Ctrl+V');
+            } catch (robotError) {
+              console.error('robotjs paste failed:', robotError);
+              console.warn('Text copied to clipboard. Please press Ctrl+V manually.');
+            }
+          } else {
+            console.warn('robotjs not available. Text copied to clipboard. Please press Ctrl+V manually.');
+          }
+        } catch (clipError) {
+          console.error('Clipboard write failed:', clipError);
+          console.error('All injection methods failed. Text could not be pasted.');
         }
+        
         lastGeneratedText = '';
       }
     }

@@ -263,8 +263,16 @@ app.whenReady().then(() => {
       }
     });
 
+    // Escape key (keycode 1) to close output window
+    uIOhook.on('keydown', (e) => {
+      if (e.keycode === 1 && outputWindow && outputWindow.isVisible()) {
+        console.log('Escape pressed - hiding output window');
+        outputWindow.hide();
+      }
+    });
+
     uIOhook.start();
-    console.log('uiohook started for hold-to-talk detection');
+    console.log('uiohook started for hold-to-talk and escape detection');
   } else {
     console.warn('Hold-to-talk not available - will use click-to-record instead');
   }

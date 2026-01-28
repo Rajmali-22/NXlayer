@@ -4,7 +4,10 @@
       "Bash(npm start)",
       "Bash(dir \"C:\\\\Users\\\\rajma\\\\Desktop\\\\zenth\\\\ai-text-bot\")",
       "Bash(cargo build:*)",
-      "Bash(dir /s \"C:\\\\Users\\\\rajma\\\\Desktop\\\\zenth\\\\ai-text-bot\\\\continus_keystrok\")"
+      "Bash(dir /s \"C:\\\\Users\\\\rajma\\\\Desktop\\\\zenth\\\\ai-text-bot\\\\continus_keystrok\")",
+      "Bash(npm install)",
+      "Bash(python:*)",
+      "Bash(pip install:*)"
     ]
   }
 }

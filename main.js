@@ -510,6 +510,55 @@ ipcMain.handle('inject-text', async (event, text) => {
   }
 });
 
+// IPC handler for voice transcription using Python + Google Speech Recognition (free)
+ipcMain.handle('transcribe-audio', async (event, options = {}) => {
+  return new Promise((resolve) => {
+    const timeout = options.timeout || 10;
+    const phraseTimeout = options.phraseTimeout || 5;
+
+    console.log('Starting Python voice transcription (live recording)');
+
+    const pythonScript = path.join(__dirname, 'voice_transcribe.py');
+
+    const pythonProcess = spawn('python', [pythonScript, '--live', timeout.toString(), phraseTimeout.toString()], {
+      cwd: __dirname
+    });
+
+    let output = '';
+    let errorOutput = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+      console.log('Voice Python:', data.toString().trim());
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code === 0 && output.trim()) {
+        try {
+          const result = JSON.parse(output.trim());
+          console.log('Transcription result:', result);
+          resolve(result);
+        } catch (e) {
+          console.error('Failed to parse Python output:', output);
+          resolve({ error: 'Failed to parse transcription result' });
+        }
+      } else {
+        console.error('Python script error:', errorOutput);
+        resolve({ error: errorOutput || 'Transcription failed' });
+      }
+    });
+
+    pythonProcess.on('error', (err) => {
+      console.error('Failed to start Python process:', err);
+      resolve({ error: 'Failed to start voice recognition: ' + err.message });
+    });
+  });
+});
+
 // IPC handler for typing text at cursor position
 ipcMain.handle('type-text', async (event, text) => {
   try {

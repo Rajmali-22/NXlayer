@@ -9,7 +9,12 @@
     "rebuild": "electron-rebuild -f -w robotjs",
     "postinstall": "electron-rebuild -f -w robotjs"
   },
-  "keywords": ["electron", "ai", "email", "overlay"],
+  "keywords": [
+    "electron",
+    "ai",
+    "email",
+    "overlay"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
@@ -17,6 +22,7 @@
     "electron-rebuild": "^3.2.9"
   },
   "dependencies": {
-    "robotjs": "^0.6.0"
+    "robotjs": "^0.6.0",
+    "uiohook-napi": "^1.5.4"
   }
 }

@@ -30,6 +30,53 @@ document.addEventListener('DOMContentLoaded', () => {
     if (micBtn) {
         micBtn.addEventListener('click', startRecording);
     }
+
+    // Listen for voice shortcut from main process (Ctrl+Shift+V)
+    ipcRenderer.on('start-voice-recording', () => {
+        console.log('Voice shortcut received');
+        startRecording();
+    });
+
+    // Hold-to-talk events
+    ipcRenderer.on('voice-recording-started', () => {
+        console.log('Hold-to-talk: Recording started');
+        isRecording = true;
+        if (micBtn) {
+            micBtn.classList.add('recording');
+            micBtn.disabled = true;
+        }
+        showStatus('Recording... Release Ctrl+Shift+V to stop', 'loading');
+    });
+
+    ipcRenderer.on('voice-recording-stopping', () => {
+        console.log('Hold-to-talk: Recording stopping');
+        showStatus('Processing speech...', 'loading');
+    });
+
+    ipcRenderer.on('voice-recording-result', (event, result) => {
+        console.log('Hold-to-talk: Result received', result);
+        isRecording = false;
+        if (micBtn) {
+            micBtn.classList.remove('recording');
+            micBtn.disabled = false;
+        }
+
+        if (result.error) {
+            showStatus('Error: ' + result.error, 'error');
+        } else if (result.text) {
+            // Append transcribed text to prompt input
+            const currentText = promptInput.value.trim();
+            if (currentText) {
+                promptInput.value = currentText + ' ' + result.text;
+            } else {
+                promptInput.value = result.text;
+            }
+            promptInput.focus();
+            showStatus('Voice input ready. Press Enter or Generate.', 'success');
+        } else {
+            showStatus('No speech detected. Try again.', 'error');
+        }
+    });
 });
 
 
@@ -88,13 +135,13 @@ async function startRecording() {
     isRecording = true;
     micBtn.classList.add('recording');
     micBtn.disabled = true;
-    showStatus('Listening... Speak now (5 sec)', 'loading');
+    showStatus('Listening... Speak now (stops on silence)', 'loading');
 
     try {
         // Call Python to record and transcribe
         const result = await ipcRenderer.invoke('transcribe-audio', {
-            timeout: 10,      // Max wait for speech to start
-            phraseTimeout: 5  // Max silence before stopping
+            timeout: 30,       // Max wait for speech to start
+            phraseTimeout: 20  // Max recording duration
         });
 
         if (result.error) {

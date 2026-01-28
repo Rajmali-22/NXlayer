@@ -11,9 +11,24 @@ try {
   console.warn('Falling back to clipboard method. Please run: npm run rebuild');
 }
 
+// Load uiohook for key release detection (hold-to-talk)
+let uIOhook = null;
+let UiohookKey = null;
+try {
+  const uiohook = require('uiohook-napi');
+  uIOhook = uiohook.uIOhook;
+  UiohookKey = uiohook.UiohookKey;
+} catch (error) {
+  console.warn('uiohook-napi not available:', error.message);
+}
+
 let mainWindow = null;
 let outputWindow = null;
 let isWindowVisible = false;
+
+// Voice recording state
+let voiceProcess = null;
+let isVoiceRecording = false;
 
 function createWindow() {
   const { screen } = require('electron');
@@ -224,6 +239,36 @@ app.whenReady().then(() => {
     console.log('Global shortcut registered: Ctrl+Shift+P (paste with Rust injection)');
   }
 
+  // Register Ctrl+Shift+V for voice input (hold-to-talk)
+  const voiceShortcut = globalShortcut.register('CommandOrControl+Shift+V', async () => {
+    if (isVoiceRecording) return; // Already recording
+
+    console.log('Voice shortcut pressed - starting recording');
+    startVoiceRecording();
+  });
+
+  if (!voiceShortcut) {
+    console.error('Failed to register voice shortcut');
+  } else {
+    console.log('Global shortcut registered: Ctrl+Shift+V (hold-to-talk voice input)');
+  }
+
+  // Set up key release detection for hold-to-talk
+  if (uIOhook) {
+    uIOhook.on('keyup', (e) => {
+      // V key code is 47 in uiohook
+      if (e.keycode === 47 && isVoiceRecording) {
+        console.log('V key released - stopping recording');
+        stopVoiceRecording();
+      }
+    });
+
+    uIOhook.start();
+    console.log('uiohook started for hold-to-talk detection');
+  } else {
+    console.warn('Hold-to-talk not available - will use click-to-record instead');
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -233,7 +278,133 @@ app.whenReady().then(() => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  if (uIOhook) {
+    uIOhook.stop();
+  }
 });
+
+// Voice recording functions for hold-to-talk
+function startVoiceRecording() {
+  if (isVoiceRecording) return;
+
+  isVoiceRecording = true;
+
+  // Show window and notify
+  if (mainWindow) {
+    mainWindow.show();
+    mainWindow.focus();
+    isWindowVisible = true;
+    mainWindow.webContents.send('voice-recording-started');
+  }
+
+  // Start Python recording (saves to temp file)
+  const pythonScript = path.join(__dirname, 'voice_transcribe.py');
+  voiceProcess = spawn('python', [pythonScript, '--record'], {
+    cwd: __dirname
+  });
+
+  voiceProcess.stderr.on('data', (data) => {
+    console.log('Voice:', data.toString().trim());
+  });
+
+  voiceProcess.on('close', (code) => {
+    console.log('Recording process closed with code:', code);
+    voiceProcess = null;
+    // Transcription will be triggered by stopVoiceRecording
+  });
+
+  voiceProcess.on('error', (err) => {
+    console.error('Voice process error:', err);
+    isVoiceRecording = false;
+    voiceProcess = null;
+    if (mainWindow) {
+      mainWindow.webContents.send('voice-recording-result', { error: err.message });
+    }
+  });
+}
+
+function stopVoiceRecording() {
+  if (!isVoiceRecording) return;
+
+  console.log('Stopping voice recording...');
+  isVoiceRecording = false;
+
+  if (mainWindow) {
+    mainWindow.webContents.send('voice-recording-stopping');
+  }
+
+  // Kill the recording process
+  if (voiceProcess) {
+    if (process.platform === 'win32') {
+      const { exec } = require('child_process');
+      exec(`taskkill /pid ${voiceProcess.pid} /T /F`, (err) => {
+        if (err) console.error('taskkill error:', err);
+        // Small delay to ensure file is saved, then transcribe
+        setTimeout(transcribeSavedRecording, 300);
+      });
+    } else {
+      try {
+        voiceProcess.kill('SIGTERM');
+      } catch (e) {
+        console.error('Error killing voice process:', e);
+      }
+      setTimeout(transcribeSavedRecording, 300);
+    }
+  } else {
+    // Process already closed, just transcribe
+    transcribeSavedRecording();
+  }
+}
+
+function transcribeSavedRecording() {
+  console.log('Transcribing saved recording...');
+
+  const pythonScript = path.join(__dirname, 'voice_transcribe.py');
+  const transcribeProcess = spawn('python', [pythonScript, '--transcribe'], {
+    cwd: __dirname
+  });
+
+  let output = '';
+  let errorOutput = '';
+
+  transcribeProcess.stdout.on('data', (data) => {
+    output += data.toString();
+  });
+
+  transcribeProcess.stderr.on('data', (data) => {
+    errorOutput += data.toString();
+    console.log('Transcribe:', data.toString().trim());
+  });
+
+  transcribeProcess.on('close', (code) => {
+    console.log('Transcribe process closed with code:', code);
+
+    let result = { error: 'No result' };
+
+    if (output.trim()) {
+      try {
+        result = JSON.parse(output.trim());
+        console.log('Transcription result:', result);
+      } catch (e) {
+        console.error('Failed to parse output:', output);
+        result = { error: 'Failed to parse result' };
+      }
+    } else if (errorOutput) {
+      result = { error: errorOutput };
+    }
+
+    if (mainWindow) {
+      mainWindow.webContents.send('voice-recording-result', result);
+    }
+  });
+
+  transcribeProcess.on('error', (err) => {
+    console.error('Transcribe process error:', err);
+    if (mainWindow) {
+      mainWindow.webContents.send('voice-recording-result', { error: err.message });
+    }
+  });
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

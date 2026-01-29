@@ -1,6 +1,5 @@
 const { ipcRenderer } = require('electron');
 
-let currentGeneratedText = '';
 let promptInput = null;
 let generateBtn = null;
 let statusDiv = null;
@@ -33,13 +32,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Listen for voice shortcut from main process (Ctrl+Shift+V)
     ipcRenderer.on('start-voice-recording', () => {
-        console.log('Voice shortcut received');
         startRecording();
     });
 
     // Hold-to-talk events
     ipcRenderer.on('voice-recording-started', () => {
-        console.log('Hold-to-talk: Recording started');
         isRecording = true;
         if (micBtn) {
             micBtn.classList.add('recording');
@@ -49,12 +46,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     ipcRenderer.on('voice-recording-stopping', () => {
-        console.log('Hold-to-talk: Recording stopping');
         showStatus('Processing speech...', 'loading');
     });
 
     ipcRenderer.on('voice-recording-result', (event, result) => {
-        console.log('Hold-to-talk: Result received', result);
         isRecording = false;
         if (micBtn) {
             micBtn.classList.remove('recording');
@@ -85,10 +80,6 @@ async function handleGenerate() {
     const toneSelect = document.getElementById('tone-select');
     const tone = toneSelect ? toneSelect.value : 'professional';
 
-    console.log('=== Frontend: Generate Request ===');
-    console.log('Prompt:', prompt);
-    console.log('Selected Tone:', tone);
-
     if (!prompt) {
         showStatus('Please enter a prompt', 'error');
         return;
@@ -99,13 +90,11 @@ async function handleGenerate() {
 
     try {
         const context = { tone: tone };
-        console.log('Sending to main process - Prompt:', prompt, 'Context:', context);
         const result = await ipcRenderer.invoke('generate-text', prompt, context);
 
         if (result.error) {
             showStatus('Error: ' + result.error, 'error');
         } else if (result.text) {
-            currentGeneratedText = result.text;
             // Send to main process for global shortcut
             ipcRenderer.send('set-generated-text', result.text);
             // Show inline suggestion near cursor
@@ -116,7 +105,6 @@ async function handleGenerate() {
         }
     } catch (error) {
         showStatus('Error: ' + error.message, 'error');
-        console.error('Generation error:', error);
     } finally {
         generateBtn.disabled = false;
     }
@@ -160,7 +148,6 @@ async function startRecording() {
             showStatus('No speech detected. Try again.', 'error');
         }
     } catch (error) {
-        console.error('Voice recording error:', error);
         showStatus('Voice input failed: ' + error.message, 'error');
     } finally {
         isRecording = false;
@@ -169,7 +156,3 @@ async function startRecording() {
     }
 }
 
-function stopRecording() {
-    // Python handles the recording timeout automatically
-    // This is kept for compatibility with the event listeners
-}

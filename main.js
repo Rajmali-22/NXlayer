@@ -13,13 +13,11 @@ try {
 
 // Load uiohook for key release detection (hold-to-talk)
 let uIOhook = null;
-let UiohookKey = null;
 try {
   const uiohook = require('uiohook-napi');
   uIOhook = uiohook.uIOhook;
-  UiohookKey = uiohook.UiohookKey;
 } catch (error) {
-  console.warn('uiohook-napi not available:', error.message);
+  // uiohook-napi not available - hold-to-talk will be disabled
 }
 
 let mainWindow = null;
@@ -40,8 +38,6 @@ function createWindow() {
   const windowHeight = 200;
   const x = Math.floor((width - windowWidth) / 2);
   const y = height - windowHeight;
-  
-  console.log(`Creating window at position: x=${x}, y=${y}, size: ${windowWidth}x${windowHeight}`);
   
   // Create transparent overlay window
   mainWindow = new BrowserWindow({
@@ -68,7 +64,6 @@ function createWindow() {
   // User can hide it with Ctrl+Shift+Space
   mainWindow.show();
   isWindowVisible = true;
-  console.log('Window shown and visible');
   
   // Prevent window from being minimized
   mainWindow.setMinimumSize(800, 200);
@@ -77,13 +72,8 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
-  
-  // Debug: Log when window is ready
-  mainWindow.webContents.on('did-finish-load', () => {
-    console.log('Window content loaded');
-  });
 
-  // Set window to ignore mouse events when not focused (allows clicking through)
+  // Allow mouse events on the window
   mainWindow.setIgnoreMouseEvents(false);
 }
 
@@ -120,20 +110,16 @@ function createOutputWindow() {
 app.whenReady().then(() => {
   createWindow();
   createOutputWindow();
-  
-  console.log('Window created. Press Ctrl+Shift+Space to toggle visibility.');
 
   const toggleShortcut = globalShortcut.register('CommandOrControl+Shift+Space', () => {
     if (mainWindow) {
       if (isWindowVisible) {
         mainWindow.hide();
         isWindowVisible = false;
-        console.log('Window hidden');
       } else {
         mainWindow.show();
         mainWindow.focus();
         isWindowVisible = true;
-        console.log('Window shown');
       }
     }
   });
@@ -181,9 +167,6 @@ app.whenReady().then(() => {
 
           exec(command, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
             if (error) {
-              console.error('Rust injection error:', error);
-              console.warn('Falling back to clipboard method...');
-
               // Fallback: clipboard + Ctrl+V
               try {
                 clipboard.writeText(lastGeneratedText);
@@ -191,28 +174,24 @@ app.whenReady().then(() => {
                   setTimeout(() => {
                     try {
                       robot.keyTap('v', 'control');
-                      console.log('Fallback: Text pasted via clipboard + Ctrl+V');
                     } catch (robotError) {
-                      console.error('robotjs paste failed:', robotError);
+                      // robotjs paste failed
                     }
                   }, 50);
                 }
               } catch (clipError) {
-                console.error('Clipboard write failed:', clipError);
+                // Clipboard write failed
               }
               lastGeneratedText = '';
             } else {
-              console.log('Rust injection successful');
               lastGeneratedText = '';
             }
           });
         } catch (error) {
-          console.error('Rust injection error:', error);
           lastGeneratedText = '';
         }
       } else {
         // Rust injector not built - fallback to clipboard
-        console.warn('Rust injector not found. Using clipboard fallback.');
         try {
           clipboard.writeText(lastGeneratedText);
           if (robot) {
@@ -220,45 +199,24 @@ app.whenReady().then(() => {
             robot.keyTap('v', 'control');
           }
         } catch (err) {
-          console.error('Fallback failed:', err);
+          // Fallback failed
         }
         lastGeneratedText = '';
       }
     }
   });
   
-  if (!toggleShortcut) {
-    console.error('Failed to register toggle shortcut');
-  } else {
-    console.log('Global shortcut registered: Ctrl+Shift+Space (toggle)');
-  }
-  
-  if (!pasteShortcut) {
-    console.error('Failed to register paste shortcut');
-  } else {
-    console.log('Global shortcut registered: Ctrl+Shift+P (paste with Rust injection)');
-  }
-
   // Register Ctrl+Shift+V for voice input (hold-to-talk)
   const voiceShortcut = globalShortcut.register('CommandOrControl+Shift+V', async () => {
     if (isVoiceRecording) return; // Already recording
-
-    console.log('Voice shortcut pressed - starting recording');
     startVoiceRecording();
   });
-
-  if (!voiceShortcut) {
-    console.error('Failed to register voice shortcut');
-  } else {
-    console.log('Global shortcut registered: Ctrl+Shift+V (hold-to-talk voice input)');
-  }
 
   // Set up key release detection for hold-to-talk
   if (uIOhook) {
     uIOhook.on('keyup', (e) => {
       // V key code is 47 in uiohook
       if (e.keycode === 47 && isVoiceRecording) {
-        console.log('V key released - stopping recording');
         stopVoiceRecording();
       }
     });
@@ -266,15 +224,11 @@ app.whenReady().then(() => {
     // Escape key (keycode 1) to close output window
     uIOhook.on('keydown', (e) => {
       if (e.keycode === 1 && outputWindow && outputWindow.isVisible()) {
-        console.log('Escape pressed - hiding output window');
         outputWindow.hide();
       }
     });
 
     uIOhook.start();
-    console.log('uiohook started for hold-to-talk and escape detection');
-  } else {
-    console.warn('Hold-to-talk not available - will use click-to-record instead');
   }
 
   app.on('activate', () => {
@@ -311,18 +265,12 @@ function startVoiceRecording() {
     cwd: __dirname
   });
 
-  voiceProcess.stderr.on('data', (data) => {
-    console.log('Voice:', data.toString().trim());
-  });
-
   voiceProcess.on('close', (code) => {
-    console.log('Recording process closed with code:', code);
     voiceProcess = null;
     // Transcription will be triggered by stopVoiceRecording
   });
 
   voiceProcess.on('error', (err) => {
-    console.error('Voice process error:', err);
     isVoiceRecording = false;
     voiceProcess = null;
     if (mainWindow) {
@@ -334,7 +282,6 @@ function startVoiceRecording() {
 function stopVoiceRecording() {
   if (!isVoiceRecording) return;
 
-  console.log('Stopping voice recording...');
   isVoiceRecording = false;
 
   if (mainWindow) {
@@ -346,7 +293,6 @@ function stopVoiceRecording() {
     if (process.platform === 'win32') {
       const { exec } = require('child_process');
       exec(`taskkill /pid ${voiceProcess.pid} /T /F`, (err) => {
-        if (err) console.error('taskkill error:', err);
         // Small delay to ensure file is saved, then transcribe
         setTimeout(transcribeSavedRecording, 300);
       });
@@ -354,7 +300,7 @@ function stopVoiceRecording() {
       try {
         voiceProcess.kill('SIGTERM');
       } catch (e) {
-        console.error('Error killing voice process:', e);
+        // Error killing voice process
       }
       setTimeout(transcribeSavedRecording, 300);
     }
@@ -365,8 +311,6 @@ function stopVoiceRecording() {
 }
 
 function transcribeSavedRecording() {
-  console.log('Transcribing saved recording...');
-
   const pythonScript = path.join(__dirname, 'voice_transcribe.py');
   const transcribeProcess = spawn('python', [pythonScript, '--transcribe'], {
     cwd: __dirname
@@ -381,20 +325,15 @@ function transcribeSavedRecording() {
 
   transcribeProcess.stderr.on('data', (data) => {
     errorOutput += data.toString();
-    console.log('Transcribe:', data.toString().trim());
   });
 
   transcribeProcess.on('close', (code) => {
-    console.log('Transcribe process closed with code:', code);
-
     let result = { error: 'No result' };
 
     if (output.trim()) {
       try {
         result = JSON.parse(output.trim());
-        console.log('Transcription result:', result);
       } catch (e) {
-        console.error('Failed to parse output:', output);
         result = { error: 'Failed to parse result' };
       }
     } else if (errorOutput) {
@@ -407,7 +346,6 @@ function transcribeSavedRecording() {
   });
 
   transcribeProcess.on('error', (err) => {
-    console.error('Transcribe process error:', err);
     if (mainWindow) {
       mainWindow.webContents.send('voice-recording-result', { error: err.message });
     }
@@ -423,30 +361,15 @@ app.on('window-all-closed', () => {
 // IPC handler for generating text
 ipcMain.handle('generate-text', async (event, prompt, context) => {
   return new Promise((resolve, reject) => {
-    console.log('=== Text Generation Request ===');
-    console.log('Prompt:', prompt);
-    console.log('Context:', JSON.stringify(context));
-    
     const pythonScript = path.join(__dirname, 'text_ai_backend.py');
-    
+
     // Pass prompt and context as JSON strings for proper parsing
-    // Python will parse them as JSON
-    // Use JSON.stringify to ensure proper escaping, then wrap in quotes for Windows command line
     const promptJson = JSON.stringify(prompt);
     const args = [pythonScript, promptJson];
-    
+
     if (context && Object.keys(context).length > 0) {
       const contextJson = JSON.stringify(context);
       args.push(contextJson);
-      console.log('Context passed to Python:', contextJson);
-    } else {
-      console.log('No context provided');
-    }
-    
-    console.log('Python command args:', args);
-    console.log('Prompt JSON:', promptJson);
-    if (context && Object.keys(context).length > 0) {
-      console.log('Context JSON:', JSON.stringify(context));
     }
 
     // Try to read API key from config file and pass as environment variable
@@ -468,25 +391,21 @@ ipcMain.handle('generate-text', async (event, prompt, context) => {
             const apiKey = mistralKeyMatch[1].trim().replace(/^["']|["']$/g, '');
             if (apiKey && apiKey !== 'your-api-key-here') {
               env.MISTRAL_API_KEY = apiKey;
-              console.log('Mistral API key loaded from', configFile);
             }
           } else if (googleKeyMatch) {
             // Fallback to Google API key for backward compatibility
             const apiKey = googleKeyMatch[1].trim().replace(/^["']|["']$/g, '');
             if (apiKey && apiKey !== 'your-api-key-here') {
               env.GOOGLE_API_KEY = apiKey;
-              console.log('Google API key loaded from', configFile, '(fallback)');
             }
           }
         } catch (err) {
-          console.warn('Could not read config file:', err.message);
+          // Could not read config file
         }
       }
     }
 
-    // On Windows, we need to properly escape JSON for command line
-    // Use a more reliable method: pass JSON via stdin or properly escape
-    // For now, let's ensure proper escaping by double-quoting the JSON strings
+    // Escape JSON for Windows command line
     const escapedArgs = args.map(arg => {
       // If it's a JSON string (starts with { or [), wrap it in quotes
       if ((arg.startsWith('{') || arg.startsWith('[')) && !arg.startsWith('"')) {
@@ -495,9 +414,7 @@ ipcMain.handle('generate-text', async (event, prompt, context) => {
       }
       return arg;
     });
-    
-    console.log('Escaped args for Windows:', escapedArgs);
-    
+
     const pythonProcess = spawn('python', escapedArgs, {
       cwd: __dirname,
       shell: true,
@@ -668,7 +585,6 @@ ipcMain.handle('inject-text', async (event, text) => {
               resolve({ success: false, error: clipError.message });
             }
           } else {
-            console.log('Rust injection successful');
             resolve({ success: true, method: 'keyboard-inject' });
           }
         });
@@ -684,7 +600,6 @@ ipcMain.handle('inject-text', async (event, text) => {
       return { success: true, method: 'clipboard', message: 'Press Ctrl+V to paste' };
     }
   } catch (error) {
-    console.error('Inject text error:', error);
     return { success: false, error: error.message };
   }
 });
@@ -694,8 +609,6 @@ ipcMain.handle('transcribe-audio', async (event, options = {}) => {
   return new Promise((resolve) => {
     const timeout = options.timeout || 10;
     const phraseTimeout = options.phraseTimeout || 5;
-
-    console.log('Starting Python voice transcription (live recording)');
 
     const pythonScript = path.join(__dirname, 'voice_transcribe.py');
 
@@ -712,27 +625,22 @@ ipcMain.handle('transcribe-audio', async (event, options = {}) => {
 
     pythonProcess.stderr.on('data', (data) => {
       errorOutput += data.toString();
-      console.log('Voice Python:', data.toString().trim());
     });
 
     pythonProcess.on('close', (code) => {
       if (code === 0 && output.trim()) {
         try {
           const result = JSON.parse(output.trim());
-          console.log('Transcription result:', result);
           resolve(result);
         } catch (e) {
-          console.error('Failed to parse Python output:', output);
           resolve({ error: 'Failed to parse transcription result' });
         }
       } else {
-        console.error('Python script error:', errorOutput);
         resolve({ error: errorOutput || 'Transcription failed' });
       }
     });
 
     pythonProcess.on('error', (err) => {
-      console.error('Failed to start Python process:', err);
       resolve({ error: 'Failed to start voice recognition: ' + err.message });
     });
   });
@@ -765,11 +673,10 @@ ipcMain.handle('type-text', async (event, text) => {
         robot.keyTap('v', 'control');
         return { success: true, method: 'clipboard-paste' };
       } catch (error) {
-        console.error('Paste error:', error);
-        return { 
-          success: true, 
+        return {
+          success: true,
           method: 'clipboard',
-          message: 'Text copied to clipboard. Press Ctrl+V to paste.' 
+          message: 'Text copied to clipboard. Press Ctrl+V to paste.'
         };
       }
     } else {
@@ -780,7 +687,6 @@ ipcMain.handle('type-text', async (event, text) => {
       };
     }
   } catch (error) {
-    console.error('Type text error:', error);
     // Last resort: copy to clipboard
     try {
       clipboard.writeText(text);

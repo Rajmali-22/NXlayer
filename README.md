@@ -14,7 +14,6 @@ An AI-powered text generation bot with a transparent overlay interface that help
 
 - **Python 3.7+** installed and in your PATH
 - **Node.js 16+** and npm
-- **Rust** (optional but recommended for fast keyboard injection) - Get from [rustup.rs](https://rustup.rs/)
 - **Mistral AI API Key**: Get one from [Mistral AI Console](https://console.mistral.ai/api-keys/)
 
 ## Available Tones
@@ -82,21 +81,7 @@ Or it will automatically rebuild after `npm install` (via postinstall script).
 
 **If robotjs fails to build**: The app will fall back to copying text to clipboard. You can then manually paste with Ctrl+V.
 
-### 4. Build Rust Keyboard Injector
-
-The app uses a Rust-based keyboard injection system for fast text input. Build it with:
-
-```bash
-cd keyboard-inject
-cargo build --release
-cd ..
-```
-
-**Note**: You need Rust installed. Get it from [rustup.rs](https://rustup.rs/)
-
-If Rust is not available, the app will fall back to clipboard paste method.
-
-### 5. Run the Application
+### 4. Run the Application
 
 ```bash
 npm start
@@ -109,7 +94,7 @@ npm start
 3. **Enter Prompt**: Type your request, e.g., "Write a message to my team about the project update"
 4. **Generate**: Press Enter or click the Generate button
 5. **Review**: The generated text will appear in a transparent floating window at the top-left
-6. **Accept**: Press `Ctrl+Shift+P` to accept and paste the text at your current cursor position (uses fast Rust-based injection)
+6. **Accept**: Press `Ctrl+Shift+P` to accept and paste the text at your current cursor position
 7. **Close**: Press `Escape` or click the × button to close the output without pasting
 
 ## Example Prompts
@@ -157,7 +142,7 @@ ai-text-bot/
 
 - `Ctrl+Shift+Space` / `Cmd+Shift+Space`: Toggle overlay window
 - `Enter`: Generate email from input
-- `Ctrl+Shift+P`: Accept and paste generated text (uses Rust keyboard injection)
+- `Ctrl+Shift+P`: Accept and paste generated text
 - `Escape`: Close output display
 
 ## License

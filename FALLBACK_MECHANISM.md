@@ -4,17 +4,17 @@ The application has a robust multi-level fallback system for keyboard injection 
 
 ## Fallback Chain (Priority Order)
 
-### 1. **Primary Method: Rust Keyboard Injector** ⚡ (Fastest)
-- **Location**: `keyboard-inject/target/release/keyboard-inject.exe` (or debug build)
-- **How it works**: Native Windows API keyboard injection via Rust
-- **Speed**: Instant (direct keyboard events)
-- **When it fails**: 
-  - Executable not found
-  - Execution error
+### 1. **Primary Method: Python Keyboard Injector** ⚡ (Fast)
+- **Location**: `keyboard_inject.py`
+- **How it works**: Uses pynput for cross-platform keyboard simulation
+- **Speed**: Fast (direct keyboard events)
+- **When it fails**:
+  - Python not available
+  - pynput not installed
   - Permission issues
 
 ### 2. **Fallback 1: Clipboard + robotjs Ctrl+V** 📋 (Fast)
-- **How it works**: 
+- **How it works**:
   1. Copy text to clipboard
   2. Use robotjs to simulate `Ctrl+V`
 - **Speed**: Very fast (clipboard paste)
@@ -40,18 +40,15 @@ All fallback levels include:
 ## Console Messages
 
 The app will log:
-- `"Rust injection successful"` - Primary method worked
+- `"Python injection successful"` - Primary method worked
 - `"Falling back to clipboard method..."` - Primary method failed
 - `"Fallback: Text pasted via clipboard + Ctrl+V"` - Fallback 1 worked
 - `"Text copied to clipboard. Please press Ctrl+V manually."` - Fallback 2 (manual)
 - `"All injection methods failed. Text could not be pasted."` - Complete failure
 
-## Building Rust Injector
+## Requirements
 
-To use the fastest method, build the Rust injector:
+Make sure you have pynput installed:
 ```bash
-cd keyboard-inject
-cargo build --release
+pip install pynput
 ```
-
-See `BUILD_RUST.md` for detailed instructions.

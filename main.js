@@ -24,6 +24,14 @@ let mainWindow = null;
 let outputWindow = null;
 let isWindowVisible = false;
 
+/** Fix inverted caps (e.g. "hELLO" -> "Hello", "i" -> "I", "HOPE" -> "Hope") from Caps Lock or odd transcription. */
+function fixInvertedCaps(str) {
+  if (typeof str !== 'string' || !str) return str;
+  return str
+    .replace(/\b([a-z])([A-Z]*)\b/g, (_, first, rest) => first.toUpperCase() + rest.toLowerCase())
+    .replace(/\b([A-Z])([A-Z]+)\b/g, (_, first, rest) => first + rest.toLowerCase());
+}
+
 // Voice recording state
 let voiceProcess = null;
 let isVoiceRecording = false;
@@ -124,7 +132,7 @@ app.whenReady().then(() => {
     }
   });
   
-  // Register Ctrl+Shift+P to paste generated text using Rust injection
+  // Register Ctrl+Shift+P to paste generated text using Python injection
   const pasteShortcut = globalShortcut.register('CommandOrControl+Shift+P', async () => {
     if (lastGeneratedText) {
       // Hide windows first
@@ -136,71 +144,51 @@ app.whenReady().then(() => {
         outputWindow.hide();
       }
 
-      // Use Rust-based keyboard injection
-      const rustInjectPath = path.join(__dirname, 'keyboard-inject', 'target', 'release', 'keyboard-inject.exe');
-      const fs = require('fs');
+      // Use Python-based keyboard injection (pynput)
+      const pythonInjectPath = path.join(__dirname, 'keyboard_inject.py');
 
-      // Also check for debug build (in case release wasn't built)
-      const rustInjectPathDebug = path.join(__dirname, 'keyboard-inject', 'target', 'debug', 'keyboard-inject.exe');
-      const actualPath = fs.existsSync(rustInjectPath) ? rustInjectPath :
-                        (fs.existsSync(rustInjectPathDebug) ? rustInjectPathDebug : null);
+      try {
+        // Small delay to ensure focus is on target app
+        await new Promise(resolve => setTimeout(resolve, 150));
 
-      if (actualPath) {
-        try {
-          // Small delay to ensure focus is on target app
-          await new Promise(resolve => setTimeout(resolve, 150));
+        // Escape the text for command line
+        let escapedText = lastGeneratedText
+          .replace(/\\/g, '\\\\')  // Escape backslashes first
+          .replace(/"/g, '\\"')     // Escape quotes
+          .replace(/\n/g, '\\n')   // Convert newlines to \n strings
+          .replace(/\r/g, '\\r')   // Convert carriage returns to \r strings
+          .replace(/\t/g, '\\t');  // Convert tabs to \t strings
 
-          // Escape the text for command line
-          let escapedText = lastGeneratedText
-            .replace(/\\/g, '\\\\')  // Escape backslashes first
-            .replace(/"/g, '\\"')     // Escape quotes
-            .replace(/\n/g, '\\n')   // Convert newlines to \n strings
-            .replace(/\r/g, '\\r')   // Convert carriage returns to \r strings
-            .replace(/\t/g, '\\t');  // Convert tabs to \t strings (Rust will convert to spaces)
+        // Wrap in quotes for command line
+        escapedText = `"${escapedText}"`;
 
-          // Wrap in quotes for command line
-          escapedText = `"${escapedText}"`;
+        // Call Python injector - pass text as argument
+        const { exec } = require('child_process');
+        const command = `python "${pythonInjectPath}" ${escapedText}`;
 
-          // Call Rust injector - pass text as argument
-          const { exec } = require('child_process');
-          const command = `"${actualPath}" ${escapedText}`;
-
-          exec(command, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
-            if (error) {
-              // Fallback: clipboard + Ctrl+V
-              try {
-                clipboard.writeText(lastGeneratedText);
-                if (robot) {
-                  setTimeout(() => {
-                    try {
-                      robot.keyTap('v', 'control');
-                    } catch (robotError) {
-                      // robotjs paste failed
-                    }
-                  }, 50);
-                }
-              } catch (clipError) {
-                // Clipboard write failed
+        exec(command, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+          if (error) {
+            // Fallback: clipboard + Ctrl+V
+            try {
+              clipboard.writeText(lastGeneratedText);
+              if (robot) {
+                setTimeout(() => {
+                  try {
+                    robot.keyTap('v', 'control');
+                  } catch (robotError) {
+                    // robotjs paste failed
+                  }
+                }, 50);
               }
-              lastGeneratedText = '';
-            } else {
-              lastGeneratedText = '';
+            } catch (clipError) {
+              // Clipboard write failed
             }
-          });
-        } catch (error) {
-          lastGeneratedText = '';
-        }
-      } else {
-        // Rust injector not built - fallback to clipboard
-        try {
-          clipboard.writeText(lastGeneratedText);
-          if (robot) {
-            await new Promise(resolve => setTimeout(resolve, 50));
-            robot.keyTap('v', 'control');
+            lastGeneratedText = '';
+          } else {
+            lastGeneratedText = '';
           }
-        } catch (err) {
-          // Fallback failed
-        }
+        });
+      } catch (error) {
         lastGeneratedText = '';
       }
     }
@@ -333,6 +321,7 @@ function transcribeSavedRecording() {
     if (output.trim()) {
       try {
         result = JSON.parse(output.trim());
+        if (result.text) result.text = fixInvertedCaps(result.text);
       } catch (e) {
         result = { error: 'Failed to parse result' };
       }
@@ -530,7 +519,7 @@ ipcMain.on('set-generated-text', (event, text) => {
   lastGeneratedText = text;
 });
 
-// IPC handler for inline text injection using Rust injector
+// IPC handler for inline text injection using Python injector
 ipcMain.handle('inject-text', async (event, text) => {
   try {
     // Hide main window to allow focus on target app
@@ -545,60 +534,45 @@ ipcMain.handle('inject-text', async (event, text) => {
     // Small delay to ensure focus is on the target application
     await new Promise(resolve => setTimeout(resolve, 150));
 
-    // Use Rust-based keyboard injection
-    const rustInjectPath = path.join(__dirname, 'keyboard-inject', 'target', 'release', 'keyboard-inject.exe');
-    const fs = require('fs');
-    const rustInjectPathDebug = path.join(__dirname, 'keyboard-inject', 'target', 'debug', 'keyboard-inject.exe');
-    const actualPath = fs.existsSync(rustInjectPath) ? rustInjectPath :
-                      (fs.existsSync(rustInjectPathDebug) ? rustInjectPathDebug : null);
+    // Use Python-based keyboard injection (pynput)
+    const pythonInjectPath = path.join(__dirname, 'keyboard_inject.py');
 
-    if (actualPath) {
-      return new Promise((resolve) => {
-        // Escape the text for command line
-        let escapedText = text
-          .replace(/\\/g, '\\\\')
-          .replace(/"/g, '\\"')
-          .replace(/\n/g, '\\n')
-          .replace(/\r/g, '\\r')
-          .replace(/\t/g, '\\t');
+    return new Promise((resolve) => {
+      // Escape the text for command line
+      let escapedText = text
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r')
+        .replace(/\t/g, '\\t');
 
-        escapedText = `"${escapedText}"`;
+      escapedText = `"${escapedText}"`;
 
-        const { exec } = require('child_process');
-        const command = `"${actualPath}" ${escapedText}`;
+      const { exec } = require('child_process');
+      const command = `python "${pythonInjectPath}" ${escapedText}`;
 
-        exec(command, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
-          if (error) {
-            console.error('Rust injection error:', error);
-            // Fallback to clipboard
-            try {
-              clipboard.writeText(text);
-              if (robot) {
-                setTimeout(() => {
-                  robot.keyTap('v', 'control');
-                  resolve({ success: true, method: 'clipboard-fallback' });
-                }, 50);
-              } else {
-                resolve({ success: true, method: 'clipboard', message: 'Press Ctrl+V to paste' });
-              }
-            } catch (clipError) {
-              resolve({ success: false, error: clipError.message });
+      exec(command, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+        if (error) {
+          console.error('Python injection error:', error);
+          // Fallback to clipboard
+          try {
+            clipboard.writeText(text);
+            if (robot) {
+              setTimeout(() => {
+                robot.keyTap('v', 'control');
+                resolve({ success: true, method: 'clipboard-fallback' });
+              }, 50);
+            } else {
+              resolve({ success: true, method: 'clipboard', message: 'Press Ctrl+V to paste' });
             }
-          } else {
-            resolve({ success: true, method: 'keyboard-inject' });
+          } catch (clipError) {
+            resolve({ success: false, error: clipError.message });
           }
-        });
+        } else {
+          resolve({ success: true, method: 'keyboard-inject' });
+        }
       });
-    } else {
-      // Fallback to clipboard
-      clipboard.writeText(text);
-      if (robot) {
-        await new Promise(resolve => setTimeout(resolve, 50));
-        robot.keyTap('v', 'control');
-        return { success: true, method: 'clipboard-fallback' };
-      }
-      return { success: true, method: 'clipboard', message: 'Press Ctrl+V to paste' };
-    }
+    });
   } catch (error) {
     return { success: false, error: error.message };
   }

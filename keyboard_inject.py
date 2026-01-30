@@ -80,16 +80,47 @@ def send_text(text):
         time.sleep(0.001)
 
 
+def send_backspaces(count):
+    """Send a number of backspace key presses to delete text."""
+    if count <= 0:
+        return
+
+    # Small delay before starting
+    time.sleep(0.05)
+
+    for _ in range(count):
+        keyboard.press(Key.backspace)
+        keyboard.release(Key.backspace)
+        # Slightly longer delay for backspaces to ensure they register
+        time.sleep(0.002)
+
+    # Small delay after backspaces before typing new text
+    time.sleep(0.05)
+
+
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python keyboard_inject.py <text>", file=sys.stderr)
+        print("Usage: python keyboard_inject.py <text> [--backspace N]", file=sys.stderr)
         sys.exit(1)
 
-    # Get text from command line argument
+    # Parse arguments
     text = sys.argv[1]
+    backspace_count = 0
+
+    # Check for --backspace flag
+    if len(sys.argv) >= 4 and sys.argv[2] == '--backspace':
+        try:
+            backspace_count = int(sys.argv[3])
+        except ValueError:
+            print("Invalid backspace count", file=sys.stderr)
+            backspace_count = 0
 
     # Unescape newlines and other escape sequences
     text = unescape_text(text)
+
+    # Send backspaces first to delete old text
+    if backspace_count > 0:
+        send_backspaces(backspace_count)
 
     # Split by actual newlines and send each line
     lines = text.split('\n')

@@ -12,3 +12,4 @@ build/
 *.dmg
 *.deb
 *.rpm
+nul

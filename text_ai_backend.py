@@ -43,38 +43,113 @@ if not api_key:
 def generate_text(prompt: str, context: dict = None) -> str:
     """
     Generate text content using structured prompt and Mistral API.
-    
+
     Args:
         prompt: User's text request/description
-        context: Optional context (tone, style, length, etc.)
-    
+        context: Optional context (tone, style, length, mode, etc.)
+
     Returns:
         Generated text content
     """
-    
-    # Get tone from context, default to professional
-    tone = context.get("tone", "professional") if context else "professional"
-    
+
+    # Get mode from context (backtick, extension, clipboard, or default prompt mode)
+    mode = context.get("mode", "prompt") if context else "prompt"
+
     # Debug logging
-    print(f"DEBUG: generate_text called with tone='{tone}'", file=sys.stderr)
+    print(f"DEBUG: generate_text called with mode='{mode}'", file=sys.stderr)
     print(f"DEBUG: Full context: {context}", file=sys.stderr)
-    
-    # Build tone-specific instructions
-    tone_instructions = {
-        "professional": "Use formal, respectful, and business-appropriate language. Maintain a polished and courteous tone.",
-        "casual": "Use friendly, relaxed, and conversational language. Write as if speaking to a friend or colleague.",
-        "friendly": "Use warm, approachable, and positive language. Be personable and engaging.",
-        "formal": "Use very formal, official language. Follow strict business or academic conventions.",
-        "creative": "Use expressive, engaging, and imaginative language. Be descriptive and vivid.",
-        "technical": "Use precise, clear, and jargon-appropriate language. Focus on accuracy and clarity.",
-        "persuasive": "Use compelling, convincing language. Structure arguments clearly and use persuasive techniques.",
-        "concise": "Use brief, direct, and to-the-point language. Eliminate unnecessary words."
-    }
-    
-    tone_guide = tone_instructions.get(tone.lower(), tone_instructions["professional"])
-    
-    # Structured prompt for text generation
-    structured_prompt = f"""You are a versatile text assistant. Generate well-structured text content based on the following request.
+    print(f"DEBUG: Prompt (first 100 chars): {prompt[:100] if len(prompt) > 100 else prompt}", file=sys.stderr)
+
+    # Handle different modes
+    if mode == "backtick":
+        # Grammar/spelling fix mode - ONLY fix, don't respond or expand
+        structured_prompt = f"""Autocorrect this text also give grammar correction and inline suggestion if possible or required. Output ONLY the corrected text with no explanation.
+
+Input: {prompt}
+Output:"""
+
+    elif mode == "extension":
+        # Continue writing mode
+        last_output = context.get("last_output", "") if context else ""
+        structured_prompt = f"""You are a writing assistant. Continue writing from where the text left off.
+
+PREVIOUS TEXT:
+{last_output}
+
+ORIGINAL CONTEXT:
+{prompt}
+
+INSTRUCTIONS:
+1. Continue writing naturally from where the previous text ended
+2. Maintain the same tone, style, and voice
+3. Add 1-2 more sentences that flow naturally
+4. Keep the continuation relevant to the context
+5. Don't repeat what was already said
+
+IMPORTANT:
+- Output ONLY the continuation (new text to append)
+- Do NOT repeat the previous text
+- Do NOT include explanations
+- Make it flow naturally as if it's one continuous piece"""
+
+    elif mode == "clipboard":
+        # Smart clipboard mode - auto-detect content type and respond appropriately
+        structured_prompt = f"""You are a smart assistant. Analyze the following content and respond appropriately based on what it is.
+
+CLIPBOARD CONTENT:
+{prompt}
+
+DETECTION AND RESPONSE RULES:
+1. If it's CODE or a programming snippet:
+   - Write relevant code (completion, fix, or related implementation)
+   - Add brief inline comments if helpful
+   - Match the programming language detected
+
+2. If it's an EMAIL or MESSAGE:
+   - Write a professional reply
+   - Address the key points mentioned
+   - Keep appropriate tone (formal for business, casual for personal)
+
+3. If it's a QUESTION:
+   - Provide a clear, direct answer
+   - Be concise but complete
+   - Include relevant details
+
+4. If it's GENERAL TEXT or a topic:
+   - Write relevant content about it
+   - Expand on the topic professionally
+   - Keep it informative and useful
+
+5. If it's DATA or a list:
+   - Analyze or summarize it
+   - Provide insights if applicable
+
+IMPORTANT:
+- Auto-detect the content type and respond accordingly
+- Output ONLY your response (no explanations about what you detected)
+- Make output ready to use immediately
+- Be concise but complete"""
+
+    else:
+        # Default prompt mode (from overlay window)
+        tone = context.get("tone", "professional") if context else "professional"
+
+        # Build tone-specific instructions
+        tone_instructions = {
+            "professional": "Use formal, respectful, and business-appropriate language. Maintain a polished and courteous tone.",
+            "casual": "Use friendly, relaxed, and conversational language. Write as if speaking to a friend or colleague.",
+            "friendly": "Use warm, approachable, and positive language. Be personable and engaging.",
+            "formal": "Use very formal, official language. Follow strict business or academic conventions.",
+            "creative": "Use expressive, engaging, and imaginative language. Be descriptive and vivid.",
+            "technical": "Use precise, clear, and jargon-appropriate language. Focus on accuracy and clarity.",
+            "persuasive": "Use compelling, convincing language. Structure arguments clearly and use persuasive techniques.",
+            "concise": "Use brief, direct, and to-the-point language. Eliminate unnecessary words."
+        }
+
+        tone_guide = tone_instructions.get(tone.lower(), tone_instructions["professional"])
+
+        # Structured prompt for text generation
+        structured_prompt = f"""You are a versatile text assistant. Generate well-structured text content based on the following request.
 
 USER REQUEST: {prompt}
 
@@ -97,21 +172,37 @@ IMPORTANT:
 - Output should be ready to use as-is"""
 
     import time
-    
+
     max_retries = 3
     retry_delay = 2  # seconds
-    
+
+    # Build messages based on mode
+    if mode == "backtick":
+        # Use system message for strict autocorrect behavior
+        messages = [
+            {
+                "role": "system",
+                "content": "You are an autocorrect tool. You ONLY fix spelling and grammar. You output ONLY the corrected text. No explanations. No preambles. No extra words. Just the fixed text."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    else:
+        messages = [
+            {
+                "role": "user",
+                "content": structured_prompt
+            }
+        ]
+
     for attempt in range(max_retries):
         try:
             with Mistral(api_key=api_key) as mistral:
                 response = mistral.chat.complete(
                     model="mistral-small-latest",
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": structured_prompt
-                        }
-                    ],
+                    messages=messages,
                     stream=False
                 )
             

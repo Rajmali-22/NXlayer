@@ -2,3 +2,6 @@ mistralai>=1.0.0
 pynput>=1.7.6
 pyaudio>=0.2.13
 SpeechRecognition>=3.10.0
+keyboard>=0.13.5
+pywin32>=306
+psutil>=5.9.0

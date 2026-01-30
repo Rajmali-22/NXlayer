@@ -1,6 +1,7 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, clipboard } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
+const readline = require('readline');
 
 // Try to load robotjs, but handle errors gracefully
 let robot = null;
@@ -23,6 +24,12 @@ try {
 let mainWindow = null;
 let outputWindow = null;
 let isWindowVisible = false;
+
+// Keystroke monitor state
+let keystrokeMonitor = null;
+let keystrokeMonitorRL = null;
+let pendingBackspaceCount = 0;  // Number of backspaces to send before injecting
+let triggerMode = null;  // 'backtick', 'extension', 'clipboard', or 'prompt'
 
 /** Fix inverted caps (e.g. "hELLO" -> "Hello", "i" -> "I", "HOPE" -> "Hope") from Caps Lock or odd transcription. */
 function fixInvertedCaps(str) {
@@ -114,10 +121,258 @@ function createOutputWindow() {
   });
 }
 
+// ============== Keystroke Monitor ==============
+
+function startKeystrokeMonitor() {
+  const pythonScript = path.join(__dirname, 'keystroke_monitor.py');
+
+  keystrokeMonitor = spawn('python', [pythonScript], {
+    cwd: __dirname,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+
+  // Read events from monitor's stdout
+  keystrokeMonitorRL = readline.createInterface({
+    input: keystrokeMonitor.stdout,
+    crlfDelay: Infinity
+  });
+
+  keystrokeMonitorRL.on('line', (line) => {
+    try {
+      const event = JSON.parse(line);
+      console.log('Received from monitor:', event.event, event.type || '');
+      handleKeystrokeEvent(event);
+    } catch (e) {
+      console.error('Failed to parse keystroke event:', line, e);
+    }
+  });
+
+  keystrokeMonitor.stderr.on('data', (data) => {
+    console.error('Keystroke monitor error:', data.toString());
+  });
+
+  keystrokeMonitor.on('close', (code) => {
+    console.log('Keystroke monitor exited with code:', code);
+    keystrokeMonitor = null;
+    keystrokeMonitorRL = null;
+  });
+
+  keystrokeMonitor.on('error', (err) => {
+    console.error('Failed to start keystroke monitor:', err);
+  });
+}
+
+function sendToMonitor(command) {
+  if (keystrokeMonitor && keystrokeMonitor.stdin) {
+    console.log('Sending to monitor:', JSON.stringify(command));
+    keystrokeMonitor.stdin.write(JSON.stringify(command) + '\n');
+  } else {
+    console.error('Keystroke monitor not running or stdin not available');
+  }
+}
+
+function stopKeystrokeMonitor() {
+  if (keystrokeMonitor) {
+    sendToMonitor({ cmd: 'shutdown' });
+    setTimeout(() => {
+      if (keystrokeMonitor) {
+        keystrokeMonitor.kill();
+      }
+    }, 1000);
+  }
+}
+
+async function handleKeystrokeEvent(event) {
+  if (event.event === 'trigger') {
+    // Backtick or extension trigger from keystroke monitor
+    const { type, buffer, char_count, window: windowTitle, last_ai_output } = event;
+
+    console.log('Trigger received - type:', type, 'buffer:', buffer, 'char_count:', char_count);
+
+    // Skip if buffer is empty (nothing to rewrite)
+    if (!buffer || buffer.trim().length === 0) {
+      console.log('Buffer is empty, skipping');
+      return;
+    }
+
+    // Store the backspace count for injection
+    pendingBackspaceCount = char_count;
+    triggerMode = type;  // 'backtick' or 'extension'
+
+    // Generate AI suggestion
+    try {
+      let result;
+      if (type === 'extension' && last_ai_output) {
+        // Extension mode - continue writing
+        result = await generateTextForMode('extension', buffer, last_ai_output);
+      } else {
+        // Backtick mode - grammar/spelling fix
+        result = await generateTextForMode('backtick', buffer);
+      }
+
+      if (result && result.text) {
+        lastGeneratedText = result.text;
+
+        // Store AI output for potential extension
+        sendToMonitor({
+          cmd: 'set_ai_output',
+          output: result.text,
+          context: buffer
+        });
+
+        // Show suggestion popup
+        await showSuggestionAtCursor(result.text);
+      }
+    } catch (error) {
+      console.error('AI generation error:', error);
+    }
+
+  } else if (event.event === 'window_change') {
+    // Window changed - reset state
+    pendingBackspaceCount = 0;
+    triggerMode = null;
+
+  } else if (event.event === 'started') {
+    console.log('Keystroke monitor started, PID:', event.pid);
+
+  } else if (event.event === 'error') {
+    console.error('Keystroke monitor error:', event.message);
+  }
+}
+
+async function generateTextForMode(mode, buffer, lastOutput = null) {
+  return new Promise((resolve, reject) => {
+    const pythonScript = path.join(__dirname, 'text_ai_backend.py');
+
+    // Build context based on mode
+    const context = { mode: mode };
+
+    if (mode === 'extension' && lastOutput) {
+      context.last_output = lastOutput;
+    }
+
+    const promptJson = JSON.stringify(buffer);
+    const contextJson = JSON.stringify(context);
+
+    console.log('generateTextForMode - mode:', mode, 'buffer length:', buffer.length);
+    console.log('Context JSON:', contextJson);
+
+    const args = [pythonScript, promptJson, contextJson];
+
+    // Load API key from env
+    const fs = require('fs');
+    let env = { ...process.env };
+    const configFiles = ['.env', 'config.example.env', 'config.env'];
+    for (const configFile of configFiles) {
+      const configPath = path.join(__dirname, configFile);
+      if (fs.existsSync(configPath)) {
+        try {
+          const configContent = fs.readFileSync(configPath, 'utf8');
+          const mistralKeyMatch = configContent.match(/MISTRAL_API_KEY\s*=\s*([^\s#\n]+)/);
+          if (mistralKeyMatch) {
+            const apiKey = mistralKeyMatch[1].trim().replace(/^["']|["']$/g, '');
+            if (apiKey && apiKey !== 'your-api-key-here') {
+              env.MISTRAL_API_KEY = apiKey;
+            }
+          }
+        } catch (err) {}
+      }
+    }
+
+    // Use spawn without shell to avoid escaping issues
+    const pythonProcess = spawn('python', args, {
+      cwd: __dirname,
+      shell: false,
+      env: env
+    });
+
+    let output = '';
+    let errorOutput = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code === 0) {
+        try {
+          const result = JSON.parse(output);
+          resolve(result);
+        } catch (e) {
+          reject(new Error('Failed to parse Python output: ' + output));
+        }
+      } else {
+        reject(new Error('Python script error: ' + errorOutput));
+      }
+    });
+  });
+}
+
+async function showSuggestionAtCursor(text) {
+  if (outputWindow) {
+    const { screen } = require('electron');
+    const cursor = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(cursor);
+    const workArea = display.workArea;
+    const [popupWidth, popupHeight] = outputWindow.getSize();
+
+    let x = cursor.x;
+    let y = cursor.y + 20;
+
+    if (y + popupHeight > workArea.y + workArea.height) {
+      y = cursor.y - popupHeight - 5;
+    }
+    if (x + popupWidth > workArea.x + workArea.width) {
+      x = workArea.x + workArea.width - popupWidth - 10;
+    }
+
+    x = Math.max(workArea.x, x);
+    y = Math.max(workArea.y, y);
+
+    outputWindow.setPosition(Math.round(x), Math.round(y));
+    outputWindow.showInactive();
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+    outputWindow.webContents.send('display-text', text);
+  }
+}
+
+async function handleClipboardTrigger() {
+  // Read clipboard content
+  const clipboardText = clipboard.readText();
+
+  if (!clipboardText || clipboardText.trim().length === 0) {
+    return;
+  }
+
+  // Set mode - no backspace needed for clipboard
+  pendingBackspaceCount = 0;
+  triggerMode = 'clipboard';
+
+  // Generate AI response based on clipboard content
+  try {
+    const result = await generateTextForMode('clipboard', clipboardText);
+
+    if (result && result.text) {
+      lastGeneratedText = result.text;
+      await showSuggestionAtCursor(result.text);
+    }
+  } catch (error) {
+    console.error('Clipboard AI generation error:', error);
+  }
+}
+
 // Register global shortcut to toggle window (Ctrl+Shift+Space)
 app.whenReady().then(() => {
   createWindow();
   createOutputWindow();
+
+  // Start keystroke monitor for background text capture
+  startKeystrokeMonitor();
 
   const toggleShortcut = globalShortcut.register('CommandOrControl+Shift+Space', () => {
     if (mainWindow) {
@@ -128,9 +383,30 @@ app.whenReady().then(() => {
         mainWindow.show();
         mainWindow.focus();
         isWindowVisible = true;
+        // When showing prompt window, set mode to 'prompt'
+        triggerMode = 'prompt';
+        pendingBackspaceCount = 0;
       }
     }
   });
+
+  // Register Ctrl+Shift+D for clipboard trigger
+  const clipboardShortcut = globalShortcut.register('CommandOrControl+Shift+D', async () => {
+    await handleClipboardTrigger();
+  });
+
+  // Register Ctrl+Alt+Enter for AI text trigger (grammar fix / inline completion)
+  const triggerShortcut = globalShortcut.register('CommandOrControl+Alt+Enter', () => {
+    console.log('Ctrl+Alt+Enter pressed - sending trigger to monitor');
+    // Tell keystroke monitor to trigger (sends buffer to Electron)
+    sendToMonitor({ cmd: 'trigger' });
+  });
+
+  if (triggerShortcut) {
+    console.log('Ctrl+Alt+Enter shortcut registered successfully');
+  } else {
+    console.error('Failed to register Ctrl+Alt+Enter shortcut');
+  }
   
   // Register Ctrl+Shift+P to paste generated text using Python injection
   const pasteShortcut = globalShortcut.register('CommandOrControl+Shift+P', async () => {
@@ -162,9 +438,16 @@ app.whenReady().then(() => {
         // Wrap in quotes for command line
         escapedText = `"${escapedText}"`;
 
-        // Call Python injector - pass text as argument
+        // Determine backspace count based on trigger mode
+        const backspaceCount = (triggerMode === 'backtick' || triggerMode === 'extension')
+          ? pendingBackspaceCount
+          : 0;
+
+        // Call Python injector - pass text and optional backspace count
         const { exec } = require('child_process');
-        const command = `python "${pythonInjectPath}" ${escapedText}`;
+        const command = backspaceCount > 0
+          ? `python "${pythonInjectPath}" ${escapedText} --backspace ${backspaceCount}`
+          : `python "${pythonInjectPath}" ${escapedText}`;
 
         exec(command, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
           if (error) {
@@ -183,13 +466,20 @@ app.whenReady().then(() => {
             } catch (clipError) {
               // Clipboard write failed
             }
-            lastGeneratedText = '';
-          } else {
-            lastGeneratedText = '';
           }
+
+          // Reset state and notify monitor
+          lastGeneratedText = '';
+          pendingBackspaceCount = 0;
+          triggerMode = null;
+
+          // Tell keystroke monitor to reset buffer
+          sendToMonitor({ cmd: 'reset' });
         });
       } catch (error) {
         lastGeneratedText = '';
+        pendingBackspaceCount = 0;
+        triggerMode = null;
       }
     }
   });
@@ -231,6 +521,8 @@ app.on('will-quit', () => {
   if (uIOhook) {
     uIOhook.stop();
   }
+  // Stop keystroke monitor
+  stopKeystrokeMonitor();
 });
 
 // Voice recording functions for hold-to-talk
@@ -394,19 +686,10 @@ ipcMain.handle('generate-text', async (event, prompt, context) => {
       }
     }
 
-    // Escape JSON for Windows command line
-    const escapedArgs = args.map(arg => {
-      // If it's a JSON string (starts with { or [), wrap it in quotes
-      if ((arg.startsWith('{') || arg.startsWith('[')) && !arg.startsWith('"')) {
-        // Escape inner quotes and wrap in double quotes
-        return '"' + arg.replace(/"/g, '\\"') + '"';
-      }
-      return arg;
-    });
-
-    const pythonProcess = spawn('python', escapedArgs, {
+    // Use spawn without shell to avoid escaping issues
+    const pythonProcess = spawn('python', args, {
       cwd: __dirname,
-      shell: true,
+      shell: false,
       env: env
     });
 

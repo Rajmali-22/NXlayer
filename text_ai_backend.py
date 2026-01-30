@@ -92,43 +92,19 @@ IMPORTANT:
 - Do NOT include explanations
 - Make it flow naturally as if it's one continuous piece"""
 
-    elif mode == "clipboard":
-        # Smart clipboard mode - auto-detect content type and respond appropriately
-        structured_prompt = f"""You are a smart assistant. Analyze the following content and respond appropriately based on what it is.
-
-CLIPBOARD CONTENT:
+    elif mode == "clipboard_with_instruction":
+        # Clipboard + typed instruction mode
+        # prompt = clipboard content, context.instruction = what user typed
+        instruction = context.get("instruction", "") if context else ""
+        structured_prompt = f"""CONTENT:
 {prompt}
 
-DETECTION AND RESPONSE RULES:
-1. If it's CODE or a programming snippet:
-   - Write relevant code (completion, fix, or related implementation)
-   - Add brief inline comments if helpful
-   - Match the programming language detected
+INSTRUCTION: {instruction}"""
 
-2. If it's an EMAIL or MESSAGE:
-   - Write a professional reply
-   - Address the key points mentioned
-   - Keep appropriate tone (formal for business, casual for personal)
-
-3. If it's a QUESTION:
-   - Provide a clear, direct answer
-   - Be concise but complete
-   - Include relevant details
-
-4. If it's GENERAL TEXT or a topic:
-   - Write relevant content about it
-   - Expand on the topic professionally
-   - Keep it informative and useful
-
-5. If it's DATA or a list:
-   - Analyze or summarize it
-   - Provide insights if applicable
-
-IMPORTANT:
-- Auto-detect the content type and respond accordingly
-- Output ONLY your response (no explanations about what you detected)
-- Make output ready to use immediately
-- Be concise but complete"""
+    elif mode == "clipboard":
+        # Smart clipboard mode - auto-detect content type and respond appropriately
+        # This will use system message for strict no-preamble behavior
+        structured_prompt = f"""{prompt}"""
 
     else:
         # Default prompt mode (from overlay window)
@@ -183,6 +159,42 @@ IMPORTANT:
             {
                 "role": "system",
                 "content": "You are an autocorrect tool. You ONLY fix spelling and grammar. You output ONLY the corrected text. No explanations. No preambles. No extra words. Just the fixed text."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    elif mode == "clipboard_with_instruction":
+        # Clipboard + instruction mode - user provides context (clipboard) and instruction (typed)
+        messages = [
+            {
+                "role": "system",
+                "content": """You follow the user's INSTRUCTION to process the CONTENT. Output ONLY the result with NO preambles, NO explanations.
+
+RULES:
+- Follow the instruction exactly
+- Output only the requested content
+- No "Here's..." or "Sure..." introductions
+- Start directly with the output"""
+            },
+            {
+                "role": "user",
+                "content": structured_prompt
+            }
+        ]
+    elif mode == "clipboard":
+        # Smart clipboard mode with strict no-preamble behavior
+        messages = [
+            {
+                "role": "system",
+                "content": """You respond to clipboard content with NO preambles, NO explanations. Output ONLY the response.
+
+RULES:
+- CODE: Output only code. No "Here's the code" or explanations. Just the code with proper indentation.
+- EMAIL/MESSAGE: Output only the reply text. No "Here's a reply" intro.
+- QUESTION: Output only the answer. No "The answer is" intro.
+- Start directly with the content. No introductions."""
             },
             {
                 "role": "user",

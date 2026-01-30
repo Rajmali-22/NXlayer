@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """
 Keyboard injection module using pynput - pure Python, no Rust.
-Replaces keyboard-inject/src/main.rs functionality.
+Features:
+- Direct (fast) typing mode - default
+- Humanize typing mode - variable delays, occasional typos, natural pauses
 """
 
 import sys
 import time
+import random
 from pynput.keyboard import Controller, Key
 
 keyboard = Controller()
@@ -26,14 +29,77 @@ SPECIAL_KEYS = {
     '\t': Key.tab,
 }
 
+# Common typo patterns (adjacent keys on QWERTY)
+TYPO_MAP = {
+    'a': ['s', 'q', 'w'],
+    'b': ['v', 'n', 'g'],
+    'c': ['x', 'v', 'd'],
+    'd': ['s', 'f', 'e'],
+    'e': ['w', 'r', 'd'],
+    'f': ['d', 'g', 'r'],
+    'g': ['f', 'h', 't'],
+    'h': ['g', 'j', 'y'],
+    'i': ['u', 'o', 'k'],
+    'j': ['h', 'k', 'u'],
+    'k': ['j', 'l', 'i'],
+    'l': ['k', 'o', 'p'],
+    'm': ['n', 'j', 'k'],
+    'n': ['b', 'm', 'h'],
+    'o': ['i', 'p', 'l'],
+    'p': ['o', 'l'],
+    'q': ['w', 'a'],
+    'r': ['e', 't', 'f'],
+    's': ['a', 'd', 'w'],
+    't': ['r', 'y', 'g'],
+    'u': ['y', 'i', 'j'],
+    'v': ['c', 'b', 'f'],
+    'w': ['q', 'e', 's'],
+    'x': ['z', 'c', 's'],
+    'y': ['t', 'u', 'h'],
+    'z': ['x', 'a'],
+}
+
 
 def unescape_text(text):
     """Convert escape sequences to actual characters."""
     return (text
             .replace('\\n', '\n')
             .replace('\\r', '\r')
-            .replace('\\t', '    ')  # Convert tabs to 4 spaces (avoid field navigation)
+            .replace('\\t', '    ')
             .replace('\t', '    '))
+
+
+def get_typing_delay(humanize=False):
+    """Get typing delay between characters."""
+    if not humanize:
+        return 0.001  # Fast direct typing (1ms)
+
+    # Human typing speed: 40-80 WPM = variable delays
+    base_delay = random.uniform(0.03, 0.12)  # 30-120ms
+
+    # Occasional longer pauses (5% chance - thinking/hesitation)
+    if random.random() < 0.05:
+        base_delay += random.uniform(0.2, 0.5)
+
+    return base_delay
+
+
+def should_make_typo(humanize=False):
+    """Decide if we should make a typo (2% chance when humanize is on)."""
+    if not humanize:
+        return False
+    return random.random() < 0.02  # 2% typo rate
+
+
+def get_typo_char(char):
+    """Get a realistic typo for the given character."""
+    char_lower = char.lower()
+
+    if char_lower in TYPO_MAP and TYPO_MAP[char_lower]:
+        typo = random.choice(TYPO_MAP[char_lower])
+        return typo.upper() if char.isupper() else typo
+
+    return char
 
 
 def send_char(char):
@@ -60,80 +126,120 @@ def send_char(char):
         keyboard.release(Key.shift)
         return
 
-    # Regular character - just type it
+    # Regular character
     try:
         keyboard.press(char)
         keyboard.release(char)
     except Exception:
-        # Fallback: use type() for unicode characters
         keyboard.type(char)
 
 
-def send_text(text):
-    """Send text character by character with proper timing."""
-    # Small delay to ensure target window is ready
+def send_backspace():
+    """Send a single backspace."""
+    keyboard.press(Key.backspace)
+    keyboard.release(Key.backspace)
+
+
+def send_text(text, humanize=False):
+    """Send text character by character."""
     time.sleep(0.05)
 
-    for char in text:
-        send_char(char)
-        # Minimal delay between characters (1ms for speed)
-        time.sleep(0.001)
+    i = 0
+    while i < len(text):
+        char = text[i]
+
+        # Humanize: occasional typos with quick correction
+        if humanize and should_make_typo() and char.isalpha():
+            typo_char = get_typo_char(char)
+
+            if typo_char != char:
+                # Type wrong character
+                send_char(typo_char)
+                time.sleep(get_typing_delay(humanize))
+
+                # Brief pause before correction
+                time.sleep(random.uniform(0.1, 0.25))
+                send_backspace()
+                time.sleep(0.02)
+
+                # Type correct character
+                send_char(char)
+        else:
+            # Normal typing
+            send_char(char)
+
+        # Delay between characters
+        time.sleep(get_typing_delay(humanize))
+
+        # Humanize: longer pause after punctuation
+        if humanize and char in '.!?,;:':
+            time.sleep(random.uniform(0.1, 0.3))
+
+        i += 1
 
 
-def send_backspaces(count):
-    """Send a number of backspace key presses to delete text."""
+def send_backspaces(count, humanize=False):
+    """Send backspace key presses to delete text."""
     if count <= 0:
         return
 
-    # Small delay before starting
     time.sleep(0.05)
 
     for _ in range(count):
-        keyboard.press(Key.backspace)
-        keyboard.release(Key.backspace)
-        # Slightly longer delay for backspaces to ensure they register
-        time.sleep(0.002)
+        send_backspace()
 
-    # Small delay after backspaces before typing new text
+        if humanize:
+            time.sleep(random.uniform(0.02, 0.05))
+        else:
+            time.sleep(0.002)
+
     time.sleep(0.05)
 
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python keyboard_inject.py <text> [--backspace N]", file=sys.stderr)
+        print("Usage: python keyboard_inject.py <text> [--backspace N] [--humanize]", file=sys.stderr)
         sys.exit(1)
 
     # Parse arguments
     text = sys.argv[1]
     backspace_count = 0
+    humanize = False  # Default: direct (fast) typing
 
-    # Check for --backspace flag
-    if len(sys.argv) >= 4 and sys.argv[2] == '--backspace':
-        try:
-            backspace_count = int(sys.argv[3])
-        except ValueError:
-            print("Invalid backspace count", file=sys.stderr)
-            backspace_count = 0
+    # Parse flags
+    i = 2
+    while i < len(sys.argv):
+        if sys.argv[i] == '--backspace' and i + 1 < len(sys.argv):
+            try:
+                backspace_count = int(sys.argv[i + 1])
+            except ValueError:
+                print("Invalid backspace count", file=sys.stderr)
+            i += 2
+        elif sys.argv[i] == '--humanize':
+            humanize = True
+            i += 1
+        else:
+            i += 1
 
-    # Unescape newlines and other escape sequences
+    # Unescape text
     text = unescape_text(text)
 
-    # Send backspaces first to delete old text
+    # Send backspaces first
     if backspace_count > 0:
-        send_backspaces(backspace_count)
+        send_backspaces(backspace_count, humanize)
 
-    # Split by actual newlines and send each line
+    # Split by newlines and send
     lines = text.split('\n')
 
-    for i, line in enumerate(lines):
+    for idx, line in enumerate(lines):
         if line:
-            send_text(line)
+            send_text(line, humanize)
 
-        # Press Enter after each line except the last
-        if i < len(lines) - 1:
+        # Press Enter after each line except last
+        if idx < len(lines) - 1:
             keyboard.press(Key.enter)
             keyboard.release(Key.enter)
-            time.sleep(0.01)
+            time.sleep(0.02 if humanize else 0.01)
 
 
 if __name__ == '__main__':

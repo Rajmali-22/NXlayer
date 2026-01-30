@@ -63,6 +63,61 @@ body {
     color: #fff;
 }
 
+/* Humanize toggle switch */
+.humanize-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.humanize-toggle input {
+    display: none;
+}
+
+.toggle-slider {
+    width: 36px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    position: relative;
+    transition: all 0.3s;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.toggle-slider::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 50%;
+    top: 1px;
+    left: 1px;
+    transition: all 0.3s;
+}
+
+.humanize-toggle input:checked + .toggle-slider {
+    background: rgba(100, 200, 100, 0.3);
+    border-color: rgba(100, 200, 100, 0.5);
+}
+
+.humanize-toggle input:checked + .toggle-slider::after {
+    left: 17px;
+    background: #6c6;
+}
+
+.toggle-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    white-space: nowrap;
+}
+
+.humanize-toggle:hover .toggle-label {
+    color: rgba(255, 255, 255, 0.9);
+}
+
 .prompt-input {
     flex: 1;
     padding: 12px 16px;

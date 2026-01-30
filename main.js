@@ -30,6 +30,7 @@ let keystrokeMonitor = null;
 let keystrokeMonitorRL = null;
 let pendingBackspaceCount = 0;  // Number of backspaces to send before injecting
 let triggerMode = null;  // 'backtick', 'extension', 'clipboard', or 'prompt'
+let humanizeTyping = false;  // Whether to use human-like typing
 
 /** Fix inverted caps (e.g. "hELLO" -> "Hello", "i" -> "I", "HOPE" -> "Hope") from Caps Lock or odd transcription. */
 function fixInvertedCaps(str) {
@@ -171,6 +172,23 @@ function sendToMonitor(command) {
   }
 }
 
+// Promise-based buffer request
+let pendingBufferResolve = null;
+
+function requestBuffer() {
+  return new Promise((resolve) => {
+    pendingBufferResolve = resolve;
+    sendToMonitor({ cmd: 'get_buffer' });
+    // Timeout after 500ms
+    setTimeout(() => {
+      if (pendingBufferResolve) {
+        pendingBufferResolve({ buffer: '', raw_count: 0 });
+        pendingBufferResolve = null;
+      }
+    }, 500);
+  });
+}
+
 function stopKeystrokeMonitor() {
   if (keystrokeMonitor) {
     sendToMonitor({ cmd: 'shutdown' });
@@ -232,6 +250,16 @@ async function handleKeystrokeEvent(event) {
     pendingBackspaceCount = 0;
     triggerMode = null;
 
+  } else if (event.event === 'buffer') {
+    // Response to get_buffer request
+    if (pendingBufferResolve) {
+      pendingBufferResolve({
+        buffer: event.buffer || '',
+        raw_count: event.raw_count || 0
+      });
+      pendingBufferResolve = null;
+    }
+
   } else if (event.event === 'started') {
     console.log('Keystroke monitor started, PID:', event.pid);
 
@@ -240,15 +268,18 @@ async function handleKeystrokeEvent(event) {
   }
 }
 
-async function generateTextForMode(mode, buffer, lastOutput = null) {
+async function generateTextForMode(mode, buffer, extraParam = null) {
   return new Promise((resolve, reject) => {
     const pythonScript = path.join(__dirname, 'text_ai_backend.py');
 
     // Build context based on mode
     const context = { mode: mode };
 
-    if (mode === 'extension' && lastOutput) {
-      context.last_output = lastOutput;
+    if (mode === 'extension' && extraParam) {
+      context.last_output = extraParam;
+    } else if (mode === 'clipboard_with_instruction' && extraParam) {
+      // extraParam is the typed instruction
+      context.instruction = extraParam;
     }
 
     const promptJson = JSON.stringify(buffer);
@@ -349,13 +380,27 @@ async function handleClipboardTrigger() {
     return;
   }
 
-  // Set mode - no backspace needed for clipboard
-  pendingBackspaceCount = 0;
+  // Get typed instruction from keystroke buffer
+  const bufferData = await requestBuffer();
+  const typedInstruction = bufferData.buffer.trim();
+
+  console.log('Clipboard trigger - clipboard:', clipboardText.substring(0, 50), '...');
+  console.log('Clipboard trigger - typed instruction:', typedInstruction);
+
+  // Set mode - no backspace needed for clipboard-only, but need backspace if there's instruction
+  pendingBackspaceCount = typedInstruction ? bufferData.raw_count : 0;
   triggerMode = 'clipboard';
 
-  // Generate AI response based on clipboard content
+  // Generate AI response based on clipboard + optional instruction
   try {
-    const result = await generateTextForMode('clipboard', clipboardText);
+    let result;
+    if (typedInstruction) {
+      // Combined mode: clipboard as context, typed text as instruction
+      result = await generateTextForMode('clipboard_with_instruction', clipboardText, typedInstruction);
+    } else {
+      // Original mode: clipboard only
+      result = await generateTextForMode('clipboard', clipboardText);
+    }
 
     if (result && result.text) {
       lastGeneratedText = result.text;
@@ -438,16 +483,18 @@ app.whenReady().then(() => {
         // Wrap in quotes for command line
         escapedText = `"${escapedText}"`;
 
-        // Determine backspace count based on trigger mode
-        const backspaceCount = (triggerMode === 'backtick' || triggerMode === 'extension')
-          ? pendingBackspaceCount
-          : 0;
+        // Use pending backspace count (already set correctly for each mode)
+        const backspaceCount = pendingBackspaceCount;
 
-        // Call Python injector - pass text and optional backspace count
+        // Call Python injector - pass text, optional backspace count, and humanize flag
         const { exec } = require('child_process');
-        const command = backspaceCount > 0
-          ? `python "${pythonInjectPath}" ${escapedText} --backspace ${backspaceCount}`
-          : `python "${pythonInjectPath}" ${escapedText}`;
+        let command = `python "${pythonInjectPath}" ${escapedText}`;
+        if (backspaceCount > 0) {
+          command += ` --backspace ${backspaceCount}`;
+        }
+        if (humanizeTyping) {
+          command += ' --humanize';
+        }
 
         exec(command, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
           if (error) {
@@ -472,9 +519,15 @@ app.whenReady().then(() => {
           lastGeneratedText = '';
           pendingBackspaceCount = 0;
           triggerMode = null;
+          humanizeTyping = false;
 
           // Tell keystroke monitor to reset buffer
           sendToMonitor({ cmd: 'reset' });
+
+          // Clear prompt input in main window
+          if (mainWindow) {
+            mainWindow.webContents.send('clear-prompt');
+          }
         });
       } catch (error) {
         lastGeneratedText = '';
@@ -499,10 +552,22 @@ app.whenReady().then(() => {
       }
     });
 
-    // Escape key (keycode 1) to close output window
+    // Escape key (keycode 1) to close output window and clear generated text
     uIOhook.on('keydown', (e) => {
-      if (e.keycode === 1 && outputWindow && outputWindow.isVisible()) {
-        outputWindow.hide();
+      if (e.keycode === 1) {
+        // Close output window if visible
+        if (outputWindow && outputWindow.isVisible()) {
+          outputWindow.hide();
+        }
+        // Clear generated text so Ctrl+Shift+P won't inject old content
+        lastGeneratedText = '';
+        pendingBackspaceCount = 0;
+        triggerMode = null;
+        humanizeTyping = false;
+        // Clear prompt input in main window
+        if (mainWindow) {
+          mainWindow.webContents.send('clear-prompt');
+        }
       }
     });
 
@@ -798,8 +863,9 @@ ipcMain.handle('hide-output', async () => {
 let lastGeneratedText = '';
 
 // IPC handler to store generated text for global shortcut
-ipcMain.on('set-generated-text', (event, text) => {
+ipcMain.on('set-generated-text', (event, text, humanize = false) => {
   lastGeneratedText = text;
+  humanizeTyping = humanize;
 });
 
 // IPC handler for inline text injection using Python injector

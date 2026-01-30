@@ -4,6 +4,7 @@ let promptInput = null;
 let generateBtn = null;
 let statusDiv = null;
 let micBtn = null;
+let humanizeToggle = null;
 
 // Voice recording state
 let isRecording = false;
@@ -13,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     generateBtn = document.getElementById('generate-btn');
     statusDiv = document.getElementById('status');
     micBtn = document.getElementById('mic-btn');
+    humanizeToggle = document.getElementById('humanize-toggle');
 
     // Generate button click
     generateBtn.addEventListener('click', handleGenerate);
@@ -72,6 +74,17 @@ document.addEventListener('DOMContentLoaded', () => {
             showStatus('No speech detected. Try again.', 'error');
         }
     });
+
+    // Clear prompt input when requested (after injection or cancel)
+    ipcRenderer.on('clear-prompt', () => {
+        if (promptInput) {
+            promptInput.value = '';
+        }
+        if (statusDiv) {
+            statusDiv.textContent = '';
+            statusDiv.classList.add('hidden');
+        }
+    });
 });
 
 
@@ -79,6 +92,7 @@ async function handleGenerate() {
     const prompt = promptInput.value.trim();
     const toneSelect = document.getElementById('tone-select');
     const tone = toneSelect ? toneSelect.value : 'professional';
+    const humanize = humanizeToggle ? humanizeToggle.checked : false;
 
     if (!prompt) {
         showStatus('Please enter a prompt', 'error');
@@ -89,14 +103,14 @@ async function handleGenerate() {
     showStatus('Generating text...', 'loading');
 
     try {
-        const context = { tone: tone };
+        const context = { tone: tone, humanize: humanize };
         const result = await ipcRenderer.invoke('generate-text', prompt, context);
 
         if (result.error) {
             showStatus('Error: ' + result.error, 'error');
         } else if (result.text) {
-            // Send to main process for global shortcut
-            ipcRenderer.send('set-generated-text', result.text);
+            // Send to main process for global shortcut (include humanize setting)
+            ipcRenderer.send('set-generated-text', result.text, humanize);
             // Show inline suggestion near cursor
             ipcRenderer.invoke('show-inline-suggestion', result.text);
             showStatus('Ctrl+Shift+P to paste | Esc to cancel', 'success');

@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: rgba(28, 28, 30, 0.92);
+            --bg-secondary: rgba(255, 255, 255, 0.06);
+            --bg-hover: rgba(255, 255, 255, 0.1);
+            --border-color: rgba(255, 255, 255, 0.12);
+            --text-primary: rgba(255, 255, 255, 0.95);
+            --text-secondary: rgba(255, 255, 255, 0.55);
+            --toggle-bg: rgba(120, 120, 128, 0.32);
+            --toggle-active: #34c759;
+        }
+
+        body.light-mode {
+            --bg-primary: rgba(255, 255, 255, 0.92);
+            --bg-secondary: rgba(0, 0, 0, 0.04);
+            --bg-hover: rgba(0, 0, 0, 0.06);
+            --border-color: rgba(0, 0, 0, 0.12);
+            --text-primary: rgba(0, 0, 0, 0.88);
+            --text-secondary: rgba(0, 0, 0, 0.5);
+            --toggle-bg: rgba(120, 120, 128, 0.2);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            background: transparent;
+            color: var(--text-primary);
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .settings-container {
+            width: 100%;
+            max-width: 380px;
+            background: var(--bg-primary);
+            backdrop-filter: blur(50px);
+            -webkit-backdrop-filter: blur(50px);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            box-shadow:
+                0 24px 80px rgba(0, 0, 0, 0.35),
+                0 0 1px rgba(255, 255, 255, 0.1) inset;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px 24px 16px;
+            position: relative;
+            -webkit-app-region: drag;
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .app-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%);
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
+        }
+
+        .app-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: -0.3px;
+        }
+
+        .close-btn {
+            position: absolute;
+            right: 16px;
+            top: 16px;
+            width: 24px;
+            height: 24px;
+            border: none;
+            background: var(--bg-secondary);
+            border-radius: 50%;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all 0.15s ease;
+            -webkit-app-region: no-drag;
+        }
+
+        .close-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        /* Settings List */
+        .settings-list {
+            padding: 8px 0 16px;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 16px 24px 10px;
+        }
+
+        .setting-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 24px;
+            transition: background 0.15s ease;
+            -webkit-app-region: no-drag;
+        }
+
+        .setting-item:hover {
+            background: var(--bg-hover);
+        }
+
+        .setting-info {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .setting-label {
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .setting-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* Toggle Switch - iOS style */
+        .toggle {
+            position: relative;
+            width: 51px;
+            height: 31px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .toggle input {
+            display: none;
+        }
+
+        .toggle-track {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--toggle-bg);
+            border-radius: 16px;
+            transition: background 0.25s ease;
+        }
+
+        .toggle input:checked + .toggle-track {
+            background: var(--toggle-active);
+        }
+
+        .toggle-thumb {
+            position: absolute;
+            width: 27px;
+            height: 27px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.25s ease;
+            box-shadow:
+                0 3px 8px rgba(0, 0, 0, 0.15),
+                0 1px 1px rgba(0, 0, 0, 0.1);
+        }
+
+        .toggle input:checked ~ .toggle-thumb {
+            transform: translateX(20px);
+        }
+
+        /* Divider */
+        .divider {
+            height: 1px;
+            background: var(--border-color);
+            margin: 8px 24px;
+        }
+
+        /* Footer */
+        .footer {
+            padding: 16px 24px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .shortcut {
+            font-size: 12px;
+            color: var(--text-secondary);
+            background: var(--bg-secondary);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="settings-container">
+        <div class="header">
+            <div class="header-content">
+                <div class="app-icon"></div>
+                <span class="app-title">AI Text Bot</span>
+            </div>
+            <button class="close-btn" id="close-btn">x</button>
+        </div>
+
+        <div class="settings-list">
+            <div class="section-title">Appearance</div>
+
+            <div class="setting-item">
+                <div class="setting-info">
+                    <span class="setting-label">Dark Mode</span>
+                    <span class="setting-desc">Use dark color theme</span>
+                </div>
+                <label class="toggle">
+                    <input type="checkbox" id="dark-mode-toggle" checked>
+                    <div class="toggle-track"></div>
+                    <div class="toggle-thumb"></div>
+                </label>
+            </div>
+
+            <div class="divider"></div>
+            <div class="section-title">Behavior</div>
+
+            <div class="setting-item">
+                <div class="setting-info">
+                    <span class="setting-label">Human-like Typing</span>
+                    <span class="setting-desc">Natural speed variation</span>
+                </div>
+                <label class="toggle">
+                    <input type="checkbox" id="humanize-toggle">
+                    <div class="toggle-track"></div>
+                    <div class="toggle-thumb"></div>
+                </label>
+            </div>
+
+            <div class="setting-item">
+                <div class="setting-info">
+                    <span class="setting-label">Auto Inject</span>
+                    <span class="setting-desc">Skip suggestion popup</span>
+                </div>
+                <label class="toggle">
+                    <input type="checkbox" id="auto-inject-toggle">
+                    <div class="toggle-track"></div>
+                    <div class="toggle-thumb"></div>
+                </label>
+            </div>
+        </div>
+
+        <div class="footer">
+            <span class="shortcut">Ctrl + Shift + S</span>
+        </div>
+    </div>
+
+    <script src="settings_renderer.js"></script>
+</body>
+</html>

@@ -10,3 +10,4 @@ mss>=9.0.0
 Pillow>=10.0.0
 replicate>=0.25.0
 anthropic>=0.18.0
+pytest>=7.0.0

@@ -13,3 +13,4 @@ build/
 *.deb
 *.rpm
 nul
+keylog.json

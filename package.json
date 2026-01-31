@@ -22,6 +22,7 @@
     "electron-rebuild": "^3.2.9"
   },
   "dependencies": {
+    "koffi": "^2.15.1",
     "robotjs": "^0.6.0",
     "uiohook-napi": "^1.5.4"
   }

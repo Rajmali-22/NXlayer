@@ -289,12 +289,15 @@ def main():
             if line:
                 send_text(line, humanize)
 
-            # Press Enter after each line except last
+            # Press Enter after each line except last; then Home so cursor is at start of line (code mode)
             if idx < len(lines) - 1:
                 check_pause()
                 keyboard.press(Key.enter)
                 keyboard.release(Key.enter)
                 time.sleep(0.02 if humanize else 0.01)
+                keyboard.press(Key.home)
+                keyboard.release(Key.home)
+                time.sleep(0.01)
     finally:
         # Cleanup pause hotkey
         cleanup_pause_hotkey()

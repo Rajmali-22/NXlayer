@@ -17,7 +17,12 @@
       "WebFetch(domain:replicate.com)",
       "Bash(node --check:*)",
       "Bash(findstr:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(node -e:*)",
+      "Bash(Select-Object Name)",
+      "Bash(tasklist:*)",
+      "Bash(del \"C:\\\\Users\\\\rajma\\\\Desktop\\\\zenth\\\\ai-text-bot\\\\text_ai_backend.py\")",
+      "Bash(del /f \"C:\\\\Users\\\\rajma\\\\Desktop\\\\zenth\\\\ai-text-bot\\\\text_ai_backend.py\")"
     ]
   }
 }

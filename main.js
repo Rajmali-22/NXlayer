@@ -2,6 +2,29 @@ const { app, BrowserWindow, globalShortcut, ipcMain, clipboard } = require('elec
 const { spawn } = require('child_process');
 const path = require('path');
 const readline = require('readline');
+const os = require('os');
+
+// Use python3 on macOS/Linux, python on Windows (production-friendly)
+function getPythonCommand() {
+  return process.platform === 'win32' ? 'python' : 'python3';
+}
+
+// Windows: exclude window from screen capture (Meet, Zoom, etc.) so it's invisible when sharing
+function setWindowExcludeFromCapture(win) {
+  if (os.platform() !== 'win32' || !win || win.isDestroyed()) return;
+  try {
+    const koffi = require('koffi');
+    const user32 = koffi.load('user32.dll');
+    const SetWindowDisplayAffinity = user32.func('SetWindowDisplayAffinity', 'bool', ['void *', 'uint32']);
+    const WDA_EXCLUDEFROMCAPTURE = 0x11; // Windows 10 2004+
+    const buf = win.getNativeWindowHandle();
+    const hwnd = buf.length === 8 ? Number(buf.readBigUInt64LE(0)) : buf.readUInt32LE(0);
+    const ok = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
+    if (!ok) console.warn('SetWindowDisplayAffinity failed for window');
+  } catch (e) {
+    console.warn('Could not set window exclude-from-capture:', e.message);
+  }
+}
 
 // Try to load robotjs, but handle errors gracefully
 let robot = null;
@@ -48,6 +71,23 @@ let cachedEnv = null;
 // Keystroke monitor restart settings
 const MONITOR_RESTART_DELAY = 2000;  // 2 seconds
 const MONITOR_MAX_RESTARTS = 5;
+
+// Normalize text for injection - strip ALL leading whitespace
+// User's cursor position + editor auto-indent handles the base indent
+function normalizeTextForInjection(text) {
+  if (typeof text !== 'string') return text;
+
+  // Remove leading/trailing newlines
+  text = text.replace(/^[\r\n]+/, '').replace(/[\r\n]+$/, '');
+  if (!text) return text;
+
+  // Strip ALL leading whitespace from each line
+  // After Enter, cursor is already at correct position in editor
+  const lines = text.split(/\r?\n/);
+  const normalizedLines = lines.map(line => line.trimStart());
+
+  return normalizedLines.join('\n');
+}
 let monitorRestartCount = 0;
 let monitorRestartTimer = null;
 
@@ -69,6 +109,10 @@ let autoInjectEnabled = false;
 // Live mode (auto-suggestion on typing pause)
 let liveModeEnabled = false;
 
+// Coding mode (show code + explanation windows for interviews)
+let codingModeEnabled = false;
+let explanationWindow = null;
+
 // Load and cache environment/config once at startup
 function loadCachedConfig() {
   const fs = require('fs');
@@ -85,7 +129,7 @@ function loadCachedConfig() {
         const mistralKeyMatch = configContent.match(/MISTRAL_API_KEY\s*=\s*([^\s#\n]+)/);
         if (mistralKeyMatch) {
           const apiKey = mistralKeyMatch[1].trim().replace(/^["']|["']$/g, '');
-          if (apiKey && apiKey !== 'your-api-key-here') {
+          if (apiKey && !apiKey.includes('your-')) {
             cachedEnv.MISTRAL_API_KEY = apiKey;
           }
         }
@@ -94,7 +138,7 @@ function loadCachedConfig() {
         const replicateMatch = configContent.match(/REPLICATE_API_TOKEN\s*=\s*([^\s#\n]+)/);
         if (replicateMatch) {
           const apiKey = replicateMatch[1].trim().replace(/^["']|["']$/g, '');
-          if (apiKey && apiKey !== 'your-api-key-here') {
+          if (apiKey && !apiKey.includes('your-')) {
             cachedEnv.REPLICATE_API_TOKEN = apiKey;
           }
         }
@@ -103,7 +147,7 @@ function loadCachedConfig() {
         const googleKeyMatch = configContent.match(/GOOGLE_API_KEY\s*=\s*([^\s#\n]+)/);
         if (googleKeyMatch) {
           const apiKey = googleKeyMatch[1].trim().replace(/^["']|["']$/g, '');
-          if (apiKey && apiKey !== 'your-api-key-here') {
+          if (apiKey && !apiKey.includes('your-')) {
             cachedEnv.GOOGLE_API_KEY = apiKey;
           }
         }
@@ -114,6 +158,13 @@ function loadCachedConfig() {
   }
 
   console.log('Config loaded. Mistral key present:', !!cachedEnv.MISTRAL_API_KEY);
+
+  // Optional: validate required keys (log only; app still starts)
+  const required = { MISTRAL_API_KEY: 'text/grammar AI' };
+  const missing = Object.entries(required).filter(([key]) => !(cachedEnv[key] && cachedEnv[key].trim() && !cachedEnv[key].includes('your-')));
+  if (missing.length) {
+    console.warn('Missing or placeholder config:', missing.map(([k]) => k).join(', '), '- copy config.example.env to .env and set keys.');
+  }
 }
 
 // Load settings from localStorage via IPC
@@ -172,6 +223,9 @@ function createWindow() {
 
   // Allow mouse events on the window
   mainWindow.setIgnoreMouseEvents(false);
+
+  // Exclude from screen capture (invisible in Meet/Zoom when sharing)
+  setWindowExcludeFromCapture(mainWindow);
 }
 
 function createOutputWindow() {
@@ -198,8 +252,43 @@ function createOutputWindow() {
   outputWindow.loadFile('output.html');
   outputWindow.hide();
 
+  // Exclude from screen capture so the suggestion popup is invisible in Meet/Zoom/Teams when sharing screen
+  setWindowExcludeFromCapture(outputWindow);
+
   outputWindow.on('closed', () => {
     outputWindow = null;
+  });
+}
+
+function createExplanationWindow() {
+  // Create explanation window for coding mode (view only, not injectable)
+  explanationWindow = new BrowserWindow({
+    width: 400,
+    height: 250,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    closable: false,
+    focusable: false,  // Don't steal focus
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      enableRemoteModule: true
+    }
+  });
+
+  explanationWindow.loadFile('explanation.html');
+  explanationWindow.hide();
+
+  // Exclude from screen capture
+  setWindowExcludeFromCapture(explanationWindow);
+
+  explanationWindow.on('closed', () => {
+    explanationWindow = null;
   });
 }
 
@@ -242,6 +331,9 @@ function createSettingsWindow() {
 
   settingsWindow.loadFile('settings.html');
 
+  // Exclude from screen capture (invisible in Meet/Zoom when sharing)
+  setWindowExcludeFromCapture(settingsWindow);
+
   settingsWindow.on('closed', () => {
     settingsWindow = null;
   });
@@ -259,7 +351,7 @@ function createSettingsWindow() {
 function startKeystrokeMonitor() {
   const pythonScript = path.join(__dirname, 'keystroke_monitor.py');
 
-  keystrokeMonitor = spawn('python', [pythonScript], {
+  keystrokeMonitor = spawn(getPythonCommand(), [pythonScript], {
     cwd: __dirname,
     stdio: ['pipe', 'pipe', 'pipe']
   });
@@ -354,7 +446,7 @@ function startAIBackend() {
   // Use cached env (loaded once at startup)
   const env = cachedEnv || process.env;
 
-  aiBackend = spawn('python', [pythonScript], {
+  aiBackend = spawn(getPythonCommand(), [pythonScript], {
     cwd: __dirname,
     stdio: ['pipe', 'pipe', 'pipe'],
     env: env
@@ -429,8 +521,14 @@ function handleAIBackendEvent(event) {
         if (outputWindow && !pendingAIRequest.autoInject) {
           outputWindow.webContents.send('stream-end');
         }
+        // Store explanation if present (coding mode)
+        if (event.explanation) {
+          lastGeneratedExplanation = event.explanation;
+        } else {
+          lastGeneratedExplanation = '';
+        }
         if (pendingAIRequest.resolve) {
-          pendingAIRequest.resolve({ text: finalText });
+          pendingAIRequest.resolve({ text: finalText, explanation: event.explanation || '' });
         }
         pendingAIRequest = null;
       }
@@ -483,6 +581,8 @@ async function generateTextStreaming(mode, buffer, extraParam = null, autoInject
       context.last_output = extraParam;
     } else if (mode === 'clipboard_with_instruction' && extraParam) {
       context.instruction = extraParam;
+    } else if (mode === 'explanation' && extraParam) {
+      context.code = extraParam;
     }
 
     // Show streaming UI if not auto-inject
@@ -578,6 +678,10 @@ async function handleKeystrokeEvent(event) {
 
       if (result && result.text) {
         lastGeneratedText = result.text;
+        // Store explanation if present (coding mode)
+        if (result.explanation) {
+          lastGeneratedExplanation = result.explanation;
+        }
 
         // Store AI output for potential extension
         sendToMonitor({
@@ -593,6 +697,7 @@ async function handleKeystrokeEvent(event) {
           await autoInjectWithBackspace(result.text, pendingBackspaceCount, humanizeTyping);
           // Clear state after injection
           lastGeneratedText = '';
+          lastGeneratedExplanation = '';
           pendingBackspaceCount = 0;
           triggerMode = null;
           // Reset monitor again after injection to be safe
@@ -633,6 +738,9 @@ async function handleKeystrokeEvent(event) {
 
 // Auto-inject text directly without showing suggestion popup
 async function autoInjectWithBackspace(text, backspaceCount, humanize = false) {
+  // Normalize text: trim and re-base indent
+  text = normalizeTextForInjection(text);
+
   return new Promise((resolve) => {
     const pythonInjectPath = path.join(__dirname, 'keyboard_inject.py');
 
@@ -652,7 +760,7 @@ async function autoInjectWithBackspace(text, backspaceCount, humanize = false) {
       args.push('--humanize');
     }
 
-    const pythonProcess = spawn('python', args, {
+    const pythonProcess = spawn(getPythonCommand(), args, {
       cwd: __dirname,
       shell: false
     });
@@ -711,7 +819,7 @@ async function generateTextForMode(mode, buffer, extraParam = null) {
     const env = cachedEnv || process.env;
 
     // Use spawn without shell to avoid escaping issues
-    const pythonProcess = spawn('python', args, {
+    const pythonProcess = spawn(getPythonCommand(), args, {
       cwd: __dirname,
       shell: false,
       env: env
@@ -800,6 +908,60 @@ async function showSuggestionAtCursor(text) {
   }
 }
 
+// Show explanation window (for coding mode)
+function showExplanationWindow() {
+  if (explanationWindow) {
+    const { screen } = require('electron');
+    const cursor = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(cursor);
+    const workArea = display.workArea;
+    const [expWidth, expHeight] = explanationWindow.getSize();
+
+    // Position to the right of cursor (or left if no space)
+    let x = cursor.x + 470; // After output window
+    let y = cursor.y + 20;
+
+    if (x + expWidth > workArea.x + workArea.width) {
+      x = cursor.x - expWidth - 20; // Left side instead
+    }
+    if (y + expHeight > workArea.y + workArea.height) {
+      y = workArea.y + workArea.height - expHeight - 10;
+    }
+
+    x = Math.max(workArea.x, x);
+    y = Math.max(workArea.y, y);
+
+    explanationWindow.setPosition(Math.round(x), Math.round(y));
+    explanationWindow.webContents.send('show-loading');
+    explanationWindow.showInactive();
+  }
+}
+
+// Generate explanation for code (second API call in coding mode)
+async function generateExplanation(problemText, codeText) {
+  try {
+    const result = await generateTextStreaming('explanation', problemText, codeText, true);
+
+    if (result && result.text && explanationWindow) {
+      lastGeneratedExplanation = result.text;
+      explanationWindow.webContents.send('display-explanation', result.text);
+    }
+  } catch (error) {
+    console.error('Failed to generate explanation:', error);
+    if (explanationWindow) {
+      explanationWindow.webContents.send('display-explanation', 'Failed to generate explanation');
+    }
+  }
+}
+
+// Hide explanation window
+function hideExplanationWindow() {
+  if (explanationWindow) {
+    explanationWindow.hide();
+    explanationWindow.webContents.send('clear-explanation');
+  }
+}
+
 async function handleScreenshotTrigger() {
   console.log('Screenshot trigger - showing vision input window');
 
@@ -856,7 +1018,7 @@ async function processVisionAnalysis(instruction) {
     // Use cached env (loaded once at startup)
     const env = cachedEnv || process.env;
 
-    const pythonProcess = spawn('python', [pythonScript, instructionJson], {
+    const pythonProcess = spawn(getPythonCommand(), [pythonScript, instructionJson], {
       cwd: __dirname,
       shell: false,
       env: env
@@ -942,6 +1104,7 @@ async function handleClipboardTrigger() {
 
   console.log('Clipboard trigger - clipboard:', clipboardText.substring(0, 50), '...');
   console.log('Clipboard trigger - typed instruction:', typedInstruction);
+  console.log('Coding mode enabled:', codingModeEnabled);
 
   // Set mode - no backspace needed for clipboard-only, but need backspace if there's instruction
   pendingBackspaceCount = typedInstruction ? bufferData.raw_count : 0;
@@ -965,6 +1128,13 @@ async function handleClipboardTrigger() {
 
     if (result && result.text) {
       lastGeneratedText = result.text;
+      lastGeneratedExplanation = '';
+
+      // If coding mode is enabled, generate explanation in parallel
+      if (codingModeEnabled && !autoInjectEnabled) {
+        showExplanationWindow();
+        generateExplanation(clipboardText, result.text);
+      }
 
       if (autoInjectEnabled) {
         // Auto mode: inject directly without showing suggestion
@@ -973,6 +1143,7 @@ async function handleClipboardTrigger() {
         await autoInjectWithBackspace(result.text, pendingBackspaceCount, humanizeTyping);
         // Clear state after injection
         lastGeneratedText = '';
+        lastGeneratedExplanation = '';
         pendingBackspaceCount = 0;
         triggerMode = null;
         // Reset monitor again after injection to be safe
@@ -997,6 +1168,7 @@ app.whenReady().then(() => {
 
   createWindow();
   createOutputWindow();
+  createExplanationWindow();
 
   // Start keystroke monitor for background text capture
   startKeystrokeMonitor();
@@ -1068,6 +1240,8 @@ app.whenReady().then(() => {
       if (outputWindow) {
         outputWindow.hide();
       }
+      // Hide explanation window (coding mode)
+      hideExplanationWindow();
 
       // Use Python-based keyboard injection (pynput)
       const pythonInjectPath = path.join(__dirname, 'keyboard_inject.py');
@@ -1092,7 +1266,7 @@ app.whenReady().then(() => {
 
         // Call Python injector - pass text, optional backspace count, and humanize flag
         const { exec } = require('child_process');
-        let command = `python "${pythonInjectPath}" ${escapedText}`;
+        let command = `${getPythonCommand()} "${pythonInjectPath}" ${escapedText}`;
         if (backspaceCount > 0) {
           command += ` --backspace ${backspaceCount}`;
         }
@@ -1100,7 +1274,7 @@ app.whenReady().then(() => {
           command += ' --humanize';
         }
 
-        exec(command, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+        exec(command, { maxBuffer: 10 * 1024 * 1024 }, async (error, stdout, stderr) => {
           if (error) {
             // Fallback: clipboard + Ctrl+V
             try {
@@ -1119,11 +1293,11 @@ app.whenReady().then(() => {
             }
           }
 
-          // Reset state and notify monitor
+          // Reset state and notify monitor (keep humanizeTyping - it's a user preference)
           lastGeneratedText = '';
+          lastGeneratedExplanation = '';
           pendingBackspaceCount = 0;
           triggerMode = null;
-          humanizeTyping = false;
 
           // Tell keystroke monitor to reset buffer
           sendToMonitor({ cmd: 'reset' });
@@ -1135,12 +1309,13 @@ app.whenReady().then(() => {
         });
       } catch (error) {
         lastGeneratedText = '';
+        lastGeneratedExplanation = '';
         pendingBackspaceCount = 0;
         triggerMode = null;
       }
     }
   });
-  
+
   // Register Ctrl+Shift+V for voice input (hold-to-talk)
   const voiceShortcut = globalShortcut.register('CommandOrControl+Shift+V', async () => {
     if (isVoiceRecording) return; // Already recording
@@ -1163,11 +1338,13 @@ app.whenReady().then(() => {
         if (outputWindow && outputWindow.isVisible()) {
           outputWindow.hide();
         }
-        // Clear generated text so Ctrl+Shift+P won't inject old content
+        // Close explanation window if visible (coding mode)
+        hideExplanationWindow();
+        // Clear generated text so Ctrl+Shift+P won't inject old content (keep humanizeTyping - user preference)
         lastGeneratedText = '';
+        lastGeneratedExplanation = '';
         pendingBackspaceCount = 0;
         triggerMode = null;
-        humanizeTyping = false;
         // Clear prompt input in main window
         if (mainWindow) {
           mainWindow.webContents.send('clear-prompt');
@@ -1212,7 +1389,7 @@ function startVoiceRecording() {
 
   // Start Python recording (saves to temp file)
   const pythonScript = path.join(__dirname, 'voice_transcribe.py');
-  voiceProcess = spawn('python', [pythonScript, '--record'], {
+  voiceProcess = spawn(getPythonCommand(), [pythonScript, '--record'], {
     cwd: __dirname
   });
 
@@ -1263,7 +1440,7 @@ function stopVoiceRecording() {
 
 function transcribeSavedRecording() {
   const pythonScript = path.join(__dirname, 'voice_transcribe.py');
-  const transcribeProcess = spawn('python', [pythonScript, '--transcribe'], {
+  const transcribeProcess = spawn(getPythonCommand(), [pythonScript, '--transcribe'], {
     cwd: __dirname
   });
 
@@ -1408,6 +1585,7 @@ ipcMain.handle('vision-analyze', async (event, instruction) => {
 
 // Store for global paste shortcut
 let lastGeneratedText = '';
+let lastGeneratedExplanation = '';  // Code explanation for coding mode
 
 // IPC handler to store generated text for global shortcut
 ipcMain.on('set-generated-text', (event, text, humanize = false) => {
@@ -1425,6 +1603,20 @@ ipcMain.handle('set-auto-inject', async (event, enabled) => {
 ipcMain.on('close-settings-window', () => {
   if (settingsWindow) {
     settingsWindow.close();
+  }
+});
+
+// When settings window opens, apply saved settings to main so preferences persist (e.g. after restart or after paste/escape)
+ipcMain.on('settings-init-sync', (event, s) => {
+  if (s && typeof s === 'object') {
+    if (s.humanizeEnabled !== undefined) humanizeTyping = s.humanizeEnabled;
+    if (s.masterEnabled !== undefined) masterEnabled = s.masterEnabled;
+    if (s.autoInjectEnabled !== undefined) autoInjectEnabled = s.autoInjectEnabled;
+    if (s.liveModeEnabled !== undefined) {
+      liveModeEnabled = s.liveModeEnabled;
+      sendToMonitor({ cmd: 'set_live_mode', enabled: liveModeEnabled });
+    }
+    if (s.codingModeEnabled !== undefined) codingModeEnabled = s.codingModeEnabled;
   }
 });
 
@@ -1454,7 +1646,8 @@ ipcMain.handle('get-settings-state', async () => {
     masterEnabled,
     autoInjectEnabled,
     humanizeEnabled: humanizeTyping,
-    liveModeEnabled
+    liveModeEnabled,
+    codingModeEnabled
   };
 });
 
@@ -1466,8 +1659,17 @@ ipcMain.on('settings-live-mode-toggle', (event, enabled) => {
   sendToMonitor({ cmd: 'set_live_mode', enabled: liveModeEnabled });
 });
 
+// IPC handler for coding mode toggle
+ipcMain.on('settings-coding-mode-toggle', (event, enabled) => {
+  codingModeEnabled = enabled;
+  console.log('Coding mode enabled:', codingModeEnabled);
+});
+
 // IPC handler for auto-inject (autonomous mode - no suggestion popup)
 ipcMain.handle('auto-inject-text', async (event, text, humanize = false) => {
+  // Normalize text: trim and re-base indent
+  text = normalizeTextForInjection(text);
+
   try {
     // Hide windows silently
     if (mainWindow) {
@@ -1501,7 +1703,7 @@ ipcMain.handle('auto-inject-text', async (event, text, humanize = false) => {
         args.push('--humanize');
       }
 
-      const pythonProcess = spawn('python', args, {
+      const pythonProcess = spawn(getPythonCommand(), args, {
         cwd: __dirname,
         shell: false
       });
@@ -1544,6 +1746,9 @@ ipcMain.handle('auto-inject-text', async (event, text, humanize = false) => {
 
 // IPC handler for inline text injection using Python injector
 ipcMain.handle('inject-text', async (event, text) => {
+  // Normalize text: trim and re-base indent
+  text = normalizeTextForInjection(text);
+
   try {
     // Hide main window to allow focus on target app
     if (mainWindow) {
@@ -1572,7 +1777,7 @@ ipcMain.handle('inject-text', async (event, text) => {
       escapedText = `"${escapedText}"`;
 
       const { exec } = require('child_process');
-      const command = `python "${pythonInjectPath}" ${escapedText}`;
+      const command = `${getPythonCommand()} "${pythonInjectPath}" ${escapedText}`;
 
       exec(command, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
         if (error) {
@@ -1609,7 +1814,7 @@ ipcMain.handle('transcribe-audio', async (event, options = {}) => {
 
     const pythonScript = path.join(__dirname, 'voice_transcribe.py');
 
-    const pythonProcess = spawn('python', [pythonScript, '--live', timeout.toString(), phraseTimeout.toString()], {
+    const pythonProcess = spawn(getPythonCommand(), [pythonScript, '--live', timeout.toString(), phraseTimeout.toString()], {
       cwd: __dirname
     });
 

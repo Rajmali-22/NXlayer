@@ -12,7 +12,6 @@ import json
 import os
 import re
 import time
-import threading
 from mistralai import Mistral
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -29,11 +28,13 @@ RETRY_DELAY = 2
 
 def load_api_key():
     """Load API key from environment or config files."""
+    # Check environment first
     api_key = os.getenv('MISTRAL_API_KEY')
-    if api_key:
+    if api_key and 'your-' not in api_key:
         return api_key
 
-    config_files = ['.env', 'config.example.env', 'config.env']
+    # Fallback to config files
+    config_files = ['.env', 'config.env', 'config.example.env']
     for config_file in config_files:
         if os.path.exists(config_file):
             try:
@@ -42,7 +43,7 @@ def load_api_key():
                     match = re.search(r'MISTRAL_API_KEY\s*=\s*([^\s#\n]+)', content)
                     if match:
                         key = match.group(1).strip().strip('"').strip("'")
-                        if key and key != 'your-api-key-here':
+                        if key and 'your-' not in key:
                             return key
             except Exception:
                 pass
@@ -81,10 +82,7 @@ class IPC:
     @staticmethod
     def send_complete(text):
         """Send complete response."""
-        IPC.send({
-            "event": "complete",
-            "text": text
-        })
+        IPC.send({"event": "complete", "text": text})
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -159,6 +157,28 @@ RULES:
             {"role": "user", "content": prompt}
         ]
 
+    elif mode == "explanation":
+        code = context.get("code", "") if context else ""
+        return [
+            {
+                "role": "system",
+                "content": """You are an interview coach explaining code solutions.
+
+OUTPUT FORMAT:
+Approach: [1 line - technique name and why]
+Key insight: [1 line - the core idea]
+Steps: 1. ... 2. ... 3. ...
+Time: O(?) Space: O(?)
+
+RULES:
+- Keep VERY brief - under 80 words
+- NO markdown (no *, no -, no bullets)
+- Use numbered steps: 1. 2. 3.
+- Focus on WHY not HOW"""
+            },
+            {"role": "user", "content": f"Problem: {prompt}\n\nCode:\n{code}\n\nExplain briefly for interview."}
+        ]
+
     else:
         # Default prompt mode
         tone = context.get("tone", "professional") if context else "professional"
@@ -202,22 +222,31 @@ def generate_streaming(prompt, context, client):
 
     for attempt in range(MAX_RETRIES):
         try:
-            # Use streaming
             stream = client.chat.stream(
                 model="mistral-small-latest",
                 messages=messages
             )
 
             for event in stream:
-                if hasattr(event, 'data') and hasattr(event.data, 'choices'):
-                    for choice in event.data.choices:
-                        if hasattr(choice, 'delta') and hasattr(choice.delta, 'content'):
-                            chunk = choice.delta.content
-                            if chunk:
-                                full_text += chunk
-                                IPC.send_chunk(chunk, is_final=False)
+                chunk = None
+                try:
+                    # Handle multiple SDK versions
+                    if hasattr(event, 'data') and hasattr(event.data, 'choices'):
+                        for choice in event.data.choices:
+                            if hasattr(choice, 'delta') and hasattr(choice.delta, 'content'):
+                                chunk = choice.delta.content
+                    elif hasattr(event, 'choices'):
+                        for choice in event.choices:
+                            if hasattr(choice, 'delta') and hasattr(choice.delta, 'content'):
+                                chunk = choice.delta.content
+                except Exception:
+                    pass
 
-            # Clean up text
+                if chunk:
+                    full_text += chunk
+                    IPC.send_chunk(chunk, is_final=False)
+
+            # Clean and finalize
             full_text = clean_response(full_text)
             IPC.send_chunk("", is_final=True)
             return full_text
@@ -225,13 +254,11 @@ def generate_streaming(prompt, context, client):
         except Exception as e:
             error_str = str(e)
 
-            # Handle retryable errors
             if '503' in error_str or 'overloaded' in error_str.lower():
                 if attempt < MAX_RETRIES - 1:
                     time.sleep(RETRY_DELAY * (attempt + 1))
                     continue
-                else:
-                    return f"Error: API overloaded. Tried {MAX_RETRIES} times."
+                return f"Error: API overloaded. Tried {MAX_RETRIES} times."
 
             if '429' in error_str or 'rate limit' in error_str.lower():
                 return "Error: API rate limit exceeded."
@@ -314,7 +341,7 @@ def handle_request(request, client):
             return
 
         if streaming:
-            text = generate_streaming(prompt, context, client)
+            generate_streaming(prompt, context, client)
         else:
             text = generate_non_streaming(prompt, context, client)
             IPC.send_complete(text)
@@ -336,14 +363,12 @@ def handle_request(request, client):
 
 def main():
     """Main entry point - persistent service."""
-    # Load API key
     api_key = load_api_key()
     if not api_key:
         IPC.send_error("Missing API key! Set MISTRAL_API_KEY in .env file.")
         IPC.send({"event": "started", "success": False})
         return
 
-    # Initialize Mistral client (kept warm)
     try:
         client = Mistral(api_key=api_key)
         IPC.send({"event": "started", "success": True, "pid": os.getpid()})
@@ -352,7 +377,6 @@ def main():
         IPC.send({"event": "started", "success": False})
         return
 
-    # Main loop - read commands from stdin
     running = True
     while running:
         try:

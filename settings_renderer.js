@@ -6,6 +6,7 @@ let settings = {
     humanizeEnabled: false,
     autoInjectEnabled: false,
     liveModeEnabled: false,
+    codingModeEnabled: false,
     darkMode: true
 };
 
@@ -15,6 +16,7 @@ let darkModeToggle;
 let humanizeToggle;
 let autoInjectToggle;
 let liveModeToggle;
+let codingModeToggle;
 let closeBtn;
 
 // Initialize
@@ -24,6 +26,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     humanizeToggle = document.getElementById('humanize-toggle');
     autoInjectToggle = document.getElementById('auto-inject-toggle');
     liveModeToggle = document.getElementById('live-mode-toggle');
+    codingModeToggle = document.getElementById('coding-mode-toggle');
     closeBtn = document.getElementById('close-btn');
 
     await loadSettings();
@@ -68,6 +71,13 @@ function setupEventListeners() {
         ipcRenderer.send('settings-live-mode-toggle', settings.liveModeEnabled);
     });
 
+    // Coding mode toggle
+    codingModeToggle.addEventListener('change', () => {
+        settings.codingModeEnabled = codingModeToggle.checked;
+        saveSettings();
+        ipcRenderer.send('settings-coding-mode-toggle', settings.codingModeEnabled);
+    });
+
     // Close button
     closeBtn.addEventListener('click', () => {
         ipcRenderer.send('close-settings-window');
@@ -86,7 +96,13 @@ async function loadSettings() {
         console.error('Failed to load settings from localStorage:', e);
     }
 
-    // Sync with main process state
+    // Push saved settings to main first (so humanize etc. persist after paste/escape or restart)
+    try {
+        ipcRenderer.send('settings-init-sync', settings);
+    } catch (e) {
+        console.error('Failed to push settings to main:', e);
+    }
+    // Then sync from main (so we show current runtime state)
     try {
         const mainState = await ipcRenderer.invoke('get-settings-state');
         if (mainState) {
@@ -94,6 +110,7 @@ async function loadSettings() {
             settings.autoInjectEnabled = mainState.autoInjectEnabled;
             settings.humanizeEnabled = mainState.humanizeEnabled;
             settings.liveModeEnabled = mainState.liveModeEnabled;
+            settings.codingModeEnabled = mainState.codingModeEnabled;
         }
     } catch (e) {
         console.error('Failed to sync settings with main process:', e);
@@ -114,6 +131,7 @@ function updateUI() {
     humanizeToggle.checked = settings.humanizeEnabled;
     autoInjectToggle.checked = settings.autoInjectEnabled;
     liveModeToggle.checked = settings.liveModeEnabled;
+    codingModeToggle.checked = settings.codingModeEnabled;
     applyTheme();
     updateDisabledState();
 }
@@ -124,6 +142,7 @@ function updateDisabledState() {
     humanizeToggle.disabled = !isEnabled;
     autoInjectToggle.disabled = !isEnabled;
     liveModeToggle.disabled = !isEnabled;
+    codingModeToggle.disabled = !isEnabled;
 
     // Visual feedback
     const behaviorItems = document.querySelectorAll('.setting-item');
@@ -158,6 +177,9 @@ ipcRenderer.on('sync-settings', (event, newSettings) => {
     }
     if (newSettings.liveModeEnabled !== undefined) {
         settings.liveModeEnabled = newSettings.liveModeEnabled;
+    }
+    if (newSettings.codingModeEnabled !== undefined) {
+        settings.codingModeEnabled = newSettings.codingModeEnabled;
     }
     if (newSettings.darkMode !== undefined) {
         settings.darkMode = newSettings.darkMode;

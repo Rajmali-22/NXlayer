@@ -16,7 +16,8 @@
       "WebSearch",
       "WebFetch(domain:replicate.com)",
       "Bash(node --check:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(ls:*)"
     ]
   }
 }

@@ -14,6 +14,7 @@ import os
 import re
 import time
 import signal
+from smart_prompts import build_prompt, clean_output
 
 # API timeout in seconds
 API_TIMEOUT = 30
@@ -66,8 +67,12 @@ def generate_text(prompt: str, context: dict = None) -> str:
         Generated text content
     """
 
+    # Ensure context is a dict
+    if context is None:
+        context = {}
+
     # Get mode from context (backtick, extension, clipboard, or default prompt mode)
-    mode = context.get("mode", "prompt") if context else "prompt"
+    mode = context.get("mode", "prompt")
 
     # Debug logging (safe for any prompt length)
     print(f"DEBUG: generate_text called with mode='{mode}'", file=sys.stderr)
@@ -106,18 +111,17 @@ IMPORTANT:
 - Make it flow naturally as if it's one continuous piece"""
 
     elif mode == "clipboard_with_instruction":
-        # Clipboard + typed instruction mode
-        # prompt = clipboard content, context.instruction = what user typed
+        # Clipboard + typed instruction mode - use smart prompts
         instruction = context.get("instruction", "") if context else ""
-        structured_prompt = f"""CONTENT:
-{prompt}
-
-INSTRUCTION: {instruction}"""
+        system_prompt, structured_prompt = build_prompt(prompt, user_instruction=instruction, mode=mode)
+        # Store system prompt for later use
+        context["_smart_system_prompt"] = system_prompt
 
     elif mode == "clipboard":
-        # Smart clipboard mode - auto-detect content type and respond appropriately
-        # This will use system message for strict no-preamble behavior
-        structured_prompt = f"""{prompt}"""
+        # Smart clipboard mode - auto-detect and use smart prompts
+        system_prompt, structured_prompt = build_prompt(prompt, mode=mode)
+        # Store system prompt for later use
+        context["_smart_system_prompt"] = system_prompt
 
     else:
         # Default prompt mode (from overlay window)
@@ -176,40 +180,17 @@ IMPORTANT:
                 "content": prompt
             }
         ]
-    elif mode == "clipboard_with_instruction":
-        # Clipboard + instruction mode - user provides context (clipboard) and instruction (typed)
+    elif mode == "clipboard_with_instruction" or mode == "clipboard":
+        # Use smart prompts system - context has _smart_system_prompt stored
+        smart_system = context.get("_smart_system_prompt", "You are a helpful assistant. Output only what is requested. No preambles.")
         messages = [
             {
                 "role": "system",
-                "content": """You follow the user's INSTRUCTION to process the CONTENT. Output ONLY the result with NO preambles, NO explanations.
-
-RULES:
-- Follow the instruction exactly
-- Output only the requested content
-- No "Here's..." or "Sure..." introductions
-- Start directly with the output"""
+                "content": smart_system
             },
             {
                 "role": "user",
                 "content": structured_prompt
-            }
-        ]
-    elif mode == "clipboard":
-        # Smart clipboard mode with strict no-preamble behavior
-        messages = [
-            {
-                "role": "system",
-                "content": """You respond to clipboard content with NO preambles, NO explanations. Output ONLY the response.
-
-RULES:
-- CODE: Output only code. No "Here's the code" or explanations. Just the code with proper indentation.
-- EMAIL/MESSAGE: Output only the reply text. No "Here's a reply" intro.
-- QUESTION: Output only the answer. No "The answer is" intro.
-- Start directly with the content. No introductions."""
-            },
-            {
-                "role": "user",
-                "content": prompt
             }
         ]
     else:
@@ -253,8 +234,14 @@ RULES:
                         continue
                     if not skip_next:
                         cleaned_lines.append(line)
-                
-                return '\n'.join(cleaned_lines).strip()
+
+                result = '\n'.join(cleaned_lines).strip()
+
+                # Apply smart prompts cleaning for clipboard modes
+                if mode in ["clipboard", "clipboard_with_instruction"]:
+                    result = clean_output(result)
+
+                return result
             else:
                 return "Error: No text content received from API. Response structure may have changed."
                 

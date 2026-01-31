@@ -1,150 +1,93 @@
-# AI Text Bot - Text Generation Assistant
+# AI Text Bot
 
-An AI-powered text generation bot with a transparent overlay interface that helps you write any type of text content using Mistral AI.
+AI-powered text assistant for live typing, interviews, and productivity. Uses Mistral AI with smart context detection.
 
-## Features
-
-- 🤖 **AI-Powered Text Generation**: Uses Mistral AI to generate text in various tones and styles
-- 🪟 **Transparent Overlay**: Non-intrusive transparent window that stays on top
-- ⌨️ **Quick Paste**: Press Tab to accept and paste generated text at your cursor position
-- 🎯 **Smart Positioning**: Output appears near your cursor position
-- 🌐 **Cross-Platform**: Works on Windows, macOS, and Linux
-
-## Prerequisites
-
-- **Python 3.7+** installed and in your PATH
-- **Node.js 16+** and npm
-- **Mistral AI API Key**: Get one from [Mistral AI Console](https://console.mistral.ai/api-keys/)
-
-## Available Tones
-
-- **Professional**: Formal, respectful, business-appropriate
-- **Casual**: Friendly, relaxed, conversational
-- **Friendly**: Warm, approachable, positive
-- **Formal**: Very formal, official language
-- **Creative**: Expressive, engaging, imaginative
-- **Technical**: Precise, clear, jargon-appropriate
-- **Persuasive**: Compelling, convincing arguments
-- **Concise**: Brief, direct, to-the-point
-
-## Setup Instructions
-
-### 1. Install Python Dependencies
+## Quick Start
 
 ```bash
-pip install -r requirements.txt
-```
-
-### 2. Configure Mistral AI API
-
-You need to set up your Mistral AI API key. Add it to your `.env` file or set it as an environment variable.
-
-**Option A: Environment Variable (Recommended)**
-```bash
-# Windows (PowerShell)
-$env:MISTRAL_API_KEY="your-api-key-here"
-
-# Windows (CMD)
-set MISTRAL_API_KEY=your-api-key-here
-
-# macOS/Linux
-export MISTRAL_API_KEY="your-api-key-here"
-```
-
-**Option B: .env File**
-Create a `.env` file in the project root:
-```
-MISTRAL_API_KEY=your-api-key-here
-```
-
-Get your API key from: https://console.mistral.ai/api-keys/
-
-### 3. Install Node.js Dependencies
-
-```bash
+# Install dependencies
 npm install
-```
+pip install -r requirements.txt
 
-**Important**: After installing, you need to rebuild `robotjs` for Electron:
+# Add API keys to .env file
+MISTRAL_API_KEY=your-key
+ANTHROPIC_API_KEY=your-key    # for screenshot vision
+OPENAI_API_KEY=your-key       # for voice (optional)
 
-```bash
-npm run rebuild
-```
-
-Or it will automatically rebuild after `npm install` (via postinstall script).
-
-**Note**: `robotjs` may require additional build tools. If you encounter issues:
-
-- **Windows**: Install [windows-build-tools](https://github.com/nodejs/node-gyp#on-windows) or [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
-- **macOS**: Install Xcode Command Line Tools: `xcode-select --install`
-- **Linux**: Install build essentials: `sudo apt-get install build-essential libxtst-dev libpng++-dev`
-
-**If robotjs fails to build**: The app will fall back to copying text to clipboard. You can then manually paste with Ctrl+V.
-
-### 4. Run the Application
-
-```bash
+# Run
 npm start
 ```
 
-## Usage
+## Keyboard Shortcuts
 
-1. **Toggle Window**: Press `Ctrl+Shift+Space` (or `Cmd+Shift+Space` on macOS) to show/hide the overlay
-2. **Select Tone**: Choose the tone/style from the dropdown (Professional, Casual, Friendly, etc.)
-3. **Enter Prompt**: Type your request, e.g., "Write a message to my team about the project update"
-4. **Generate**: Press Enter or click the Generate button
-5. **Review**: The generated text will appear in a transparent floating window at the top-left
-6. **Accept**: Press `Ctrl+Shift+P` to accept and paste the text at your current cursor position
-7. **Close**: Press `Escape` or click the × button to close the output without pasting
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Alt+Enter` | Fix grammar / continue writing / instruction mode |
+| `Ctrl+Shift+D` | Process clipboard (auto-detects code/question/text) |
+| `Ctrl+Shift+P` | Paste/inject AI response |
+| `Ctrl+Shift+F` | Screenshot + Vision (analyzes screen) |
+| `Ctrl+Shift+V` | Voice record / stop |
+| `Ctrl+Shift+Space` | Toggle overlay window |
+| `Ctrl+.` | Pause/resume text injection |
+| `Escape` | Cancel / close popup |
 
-## Example Prompts
+## Smart Clipboard (Ctrl+Shift+D)
 
-- "Write a message to my boss requesting time off next week" (Professional tone)
-- "Create a casual update about the project progress" (Casual tone)
-- "Draft a friendly reminder about the team meeting" (Friendly tone)
-- "Write a technical explanation of how the new feature works" (Technical tone)
-- "Create a persuasive pitch for the new product idea" (Persuasive tone)
+Auto-detects what you copied and responds appropriately:
+
+| You Copy | AI Response |
+|----------|-------------|
+| "two sum problem" | Pure code solution |
+| "OOP" | 25-35 word definition |
+| "What is REST?" | Direct 2-4 sentence answer |
+| Code + "explain this" | Follows your instruction |
+
+Output is clean plain text - no markdown, no preambles. Ready for interviews.
+
+## Modes
+
+- **Backtick mode**: Grammar/spelling fix (Ctrl+Alt+Enter on typed text)
+- **Extension mode**: Continue writing (Ctrl+Alt+Enter again within 2s)
+- **Clipboard mode**: Smart processing (Ctrl+Shift+D)
+- **Vision mode**: Screenshot analysis (Ctrl+Shift+F)
+- **Voice mode**: Speech to text (Ctrl+Shift+V)
 
 ## Project Structure
 
 ```
 ai-text-bot/
-├── email_ai_backend.py    # Python backend for Mistral AI
-├── main.js                # Electron main process
-├── index.html             # UI structure
-├── styles.css             # Styling
-├── renderer.js            # Frontend logic
-├── package.json           # Node.js dependencies
-├── requirements.txt       # Python dependencies
-└── README.md             # This file
+├── main.js               # Electron main process
+├── text_ai_backend.py    # Mistral AI backend
+├── smart_prompts.py      # Context-aware prompting
+├── keyboard_inject.py    # Text injection
+├── keystroke_monitor/    # Keyboard monitoring
+├── screenshot_vision.py  # Vision AI (Claude)
+├── voice_transcribe.py   # Speech to text
+├── index.html            # Main UI
+├── settings.html         # Settings UI
+├── renderer.js           # Frontend logic
+├── styles.css            # Styling
+├── .env                  # API keys
+└── requirements.txt      # Python dependencies
 ```
 
 ## Troubleshooting
 
-### Python Script Not Found
-- Ensure Python is in your PATH
-- On Windows, you may need to use `python3` instead of `python`
+| Problem | Solution |
+|---------|----------|
+| npm/python not found | Reinstall and add to PATH, restart PC |
+| Module not found | Run `pip install -r requirements.txt` |
+| Shortcuts not working | Run as Administrator |
+| API errors | Check API keys in .env |
 
-### robotjs Installation Issues
-- Make sure you have the required build tools installed
-- Try: `npm install --build-from-source robotjs`
+## Requirements
 
-### API Authentication Errors
-- Verify your `MISTRAL_API_KEY` environment variable is set correctly
-- Check that your API key is valid and has credits/quota available
-- Get a new API key from: https://console.mistral.ai/api-keys/
+- Node.js 16+
+- Python 3.8+
+- Windows (primary), macOS/Linux (partial support)
 
-### Window Not Appearing
-- Check if the window is hidden behind other applications
-- Try pressing `Ctrl+Shift+Space` again to toggle visibility
+## API Keys
 
-## Keyboard Shortcuts
-
-- `Ctrl+Shift+Space` / `Cmd+Shift+Space`: Toggle overlay window
-- `Enter`: Generate email from input
-- `Ctrl+Shift+P`: Accept and paste generated text
-- `Escape`: Close output display
-
-## License
-
-MIT
+- **Mistral**: https://console.mistral.ai/api-keys/
+- **Anthropic**: https://console.anthropic.com/settings/keys
+- **OpenAI**: https://platform.openai.com/api-keys (optional)

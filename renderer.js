@@ -4,8 +4,6 @@ let promptInput = null;
 let generateBtn = null;
 let statusDiv = null;
 let micBtn = null;
-let humanizeToggle = null;
-let autoInjectToggle = null;
 
 // Voice recording state
 let isRecording = false;
@@ -15,15 +13,6 @@ document.addEventListener('DOMContentLoaded', () => {
     generateBtn = document.getElementById('generate-btn');
     statusDiv = document.getElementById('status');
     micBtn = document.getElementById('mic-btn');
-    humanizeToggle = document.getElementById('humanize-toggle');
-    autoInjectToggle = document.getElementById('auto-inject-toggle');
-
-    // Sync auto-inject setting with main process
-    if (autoInjectToggle) {
-        autoInjectToggle.addEventListener('change', () => {
-            ipcRenderer.invoke('set-auto-inject', autoInjectToggle.checked);
-        });
-    }
 
     // Generate button click
     generateBtn.addEventListener('click', handleGenerate);
@@ -101,8 +90,18 @@ async function handleGenerate() {
     const prompt = promptInput.value.trim();
     const toneSelect = document.getElementById('tone-select');
     const tone = toneSelect ? toneSelect.value : 'professional';
-    const humanize = humanizeToggle ? humanizeToggle.checked : false;
-    const autoInject = autoInjectToggle ? autoInjectToggle.checked : false;
+
+    // Get settings from localStorage (synced with settings window)
+    let humanize = false;
+    let autoInject = false;
+    try {
+        const saved = localStorage.getItem('ai-text-bot-settings');
+        if (saved) {
+            const settings = JSON.parse(saved);
+            humanize = settings.humanizeEnabled || false;
+            autoInject = settings.autoInjectEnabled || false;
+        }
+    } catch (e) {}
 
     if (!prompt) {
         showStatus('Please enter a prompt', 'error');

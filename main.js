@@ -23,6 +23,7 @@ try {
 
 let mainWindow = null;
 let outputWindow = null;
+let settingsWindow = null;
 let isWindowVisible = false;
 
 // Keystroke monitor state
@@ -122,6 +123,57 @@ function createOutputWindow() {
 
   outputWindow.on('closed', () => {
     outputWindow = null;
+  });
+}
+
+function createSettingsWindow() {
+  if (settingsWindow) {
+    settingsWindow.focus();
+    return;
+  }
+
+  const { screen } = require('electron');
+  const cursor = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(cursor);
+  const workArea = display.workArea;
+
+  // macOS-style settings panel
+  const windowWidth = 420;
+  const windowHeight = 380;
+
+  // Position near center-top of screen
+  const x = Math.round(workArea.x + (workArea.width - windowWidth) / 2);
+  const y = Math.round(workArea.y + 100);
+
+  settingsWindow = new BrowserWindow({
+    width: windowWidth,
+    height: windowHeight,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    x: x,
+    y: y,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  });
+
+  settingsWindow.loadFile('settings.html');
+
+  settingsWindow.on('closed', () => {
+    settingsWindow = null;
+  });
+
+  // Close on blur (click outside)
+  settingsWindow.on('blur', () => {
+    if (settingsWindow) {
+      settingsWindow.close();
+    }
   });
 }
 
@@ -688,7 +740,20 @@ app.whenReady().then(() => {
     console.log('Ctrl+Shift+F pressed - screenshot + vision trigger');
     await handleScreenshotTrigger();
   });
-  
+
+  // Register Ctrl+Shift+S for settings window
+  const settingsShortcut = globalShortcut.register('CommandOrControl+Shift+S', () => {
+    if (settingsWindow) {
+      settingsWindow.close();
+    } else {
+      createSettingsWindow();
+    }
+  });
+
+  if (settingsShortcut) {
+    console.log('Ctrl+Shift+S shortcut registered successfully');
+  }
+
   // Register Ctrl+Shift+P to paste generated text using Python injection
   const pasteShortcut = globalShortcut.register('CommandOrControl+Shift+P', async () => {
     if (lastGeneratedText) {
@@ -1114,6 +1179,18 @@ ipcMain.on('set-generated-text', (event, text, humanize = false) => {
 ipcMain.handle('set-auto-inject', async (event, enabled) => {
   autoInjectEnabled = enabled;
   return { success: true, autoInject: autoInjectEnabled };
+});
+
+// IPC handler for settings window close
+ipcMain.on('close-settings-window', () => {
+  if (settingsWindow) {
+    settingsWindow.close();
+  }
+});
+
+// IPC handler for humanize toggle from settings
+ipcMain.on('settings-humanize-toggle', (event, enabled) => {
+  humanizeTyping = enabled;
 });
 
 // IPC handler for auto-inject (autonomous mode - no suggestion popup)

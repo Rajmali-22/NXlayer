@@ -1,11 +1,26 @@
 """
 AI Text Generation Backend using Mistral AI API
+
+Features:
+- Multiple generation modes (backtick, extension, clipboard, prompt)
+- Retry logic for API errors
+- Timeout protection
+- Safe error handling
 """
 from mistralai import Mistral
 import json
 import sys
 import os
 import re
+import time
+import signal
+
+# API timeout in seconds
+API_TIMEOUT = 30
+
+def timeout_handler(signum, frame):
+    """Handle timeout signal."""
+    raise TimeoutError("API call timed out")
 
 def load_api_key():
     """Load API key from environment variable or config file."""
@@ -35,10 +50,9 @@ def load_api_key():
 # Initialize the Mistral client
 api_key = load_api_key()
 if not api_key:
-    raise ValueError(
-        "Missing API key! Set MISTRAL_API_KEY environment variable or add it to .env/config.example.env file.\n"
-        "Get your API key from: https://console.mistral.ai/api-keys/"
-    )
+    # Don't crash - return error in JSON format so Electron can handle it
+    print(json.dumps({"error": "Missing API key! Set MISTRAL_API_KEY in .env file."}))
+    sys.exit(0)
 
 def generate_text(prompt: str, context: dict = None) -> str:
     """
@@ -55,10 +69,9 @@ def generate_text(prompt: str, context: dict = None) -> str:
     # Get mode from context (backtick, extension, clipboard, or default prompt mode)
     mode = context.get("mode", "prompt") if context else "prompt"
 
-    # Debug logging
+    # Debug logging (safe for any prompt length)
     print(f"DEBUG: generate_text called with mode='{mode}'", file=sys.stderr)
-    print(f"DEBUG: Full context: {context}", file=sys.stderr)
-    print(f"DEBUG: Prompt (first 100 chars): {prompt[:100] if len(prompt) > 100 else prompt}", file=sys.stderr)
+    print(f"DEBUG: Prompt length: {len(prompt) if prompt else 0} chars", file=sys.stderr)
 
     # Handle different modes
     if mode == "backtick":
@@ -146,8 +159,6 @@ IMPORTANT:
 - Do not include any explanations, meta-commentary, or instructions
 - Start directly with the content
 - Output should be ready to use as-is"""
-
-    import time
 
     max_retries = 3
     retry_delay = 2  # seconds
@@ -296,45 +307,55 @@ def main():
     """Main function to handle command-line input."""
     if len(sys.argv) < 2:
         print(json.dumps({"error": "No prompt provided"}))
-        sys.exit(1)
-    
-    # Parse the prompt (it comes JSON-stringified from Electron)
+        sys.exit(0)
+
     try:
-        prompt = json.loads(sys.argv[1])
-    except json.JSONDecodeError as e:
-        # If not valid JSON, try stripping quotes and parsing again
+        # Parse the prompt (it comes JSON-stringified from Electron)
         try:
-            # Windows command line might add extra quotes
-            cleaned = sys.argv[1].strip('"').strip("'")
-            prompt = json.loads(cleaned)
-        except:
-            # If still fails, use as-is
-            prompt = sys.argv[1]
-            print(f"DEBUG: Using prompt as-is (not JSON): {prompt[:50]}...", file=sys.stderr)
-    
-    context = None
-    
-    # Try to parse context if provided as second argument
-    if len(sys.argv) > 2:
-        try:
-            context = json.loads(sys.argv[2])
-            print(f"DEBUG: Context received: {context}", file=sys.stderr)
-        except json.JSONDecodeError as e:
-            # Try stripping quotes that Windows might add
+            prompt = json.loads(sys.argv[1])
+        except json.JSONDecodeError:
+            # If not valid JSON, try stripping quotes and parsing again
             try:
-                cleaned = sys.argv[2].strip('"').strip("'")
-                context = json.loads(cleaned)
-                print(f"DEBUG: Context received (after cleaning): {context}", file=sys.stderr)
-            except Exception as e2:
-                print(f"DEBUG: Failed to parse context: {e2}", file=sys.stderr)
-                print(f"DEBUG: Raw context arg: {repr(sys.argv[2])}", file=sys.stderr)
-                pass
-    
-    print(f"DEBUG: Prompt: {prompt[:50]}...", file=sys.stderr)
-    print(f"DEBUG: Tone: {context.get('tone') if context else 'default'}", file=sys.stderr)
-    
-    text = generate_text(prompt, context)
-    print(json.dumps({"text": text}))
+                cleaned = sys.argv[1].strip('"').strip("'")
+                prompt = json.loads(cleaned)
+            except:
+                # If still fails, use as-is
+                prompt = sys.argv[1]
+
+        # Validate prompt
+        if not prompt or not isinstance(prompt, str):
+            print(json.dumps({"error": "Invalid prompt"}))
+            sys.exit(0)
+
+        # Limit prompt size (max 50KB)
+        MAX_PROMPT_SIZE = 50000
+        if len(prompt) > MAX_PROMPT_SIZE:
+            prompt = prompt[:MAX_PROMPT_SIZE]
+            print(f"DEBUG: Prompt truncated to {MAX_PROMPT_SIZE} chars", file=sys.stderr)
+
+        context = None
+
+        # Try to parse context if provided as second argument
+        if len(sys.argv) > 2:
+            try:
+                context = json.loads(sys.argv[2])
+            except json.JSONDecodeError:
+                try:
+                    cleaned = sys.argv[2].strip('"').strip("'")
+                    context = json.loads(cleaned)
+                except:
+                    context = None
+
+        print(f"DEBUG: Prompt length: {len(prompt)} chars", file=sys.stderr)
+        print(f"DEBUG: Mode: {context.get('mode', 'default') if context else 'default'}", file=sys.stderr)
+
+        text = generate_text(prompt, context)
+        print(json.dumps({"text": text}))
+
+    except Exception as e:
+        # Catch-all error handler
+        print(json.dumps({"error": f"Unexpected error: {str(e)}"}))
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()

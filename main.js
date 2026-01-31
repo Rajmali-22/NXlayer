@@ -33,6 +33,18 @@ let pendingBackspaceCount = 0;  // Number of backspaces to send before injecting
 let triggerMode = null;  // 'backtick', 'extension', 'clipboard', or 'prompt'
 let humanizeTyping = false;  // Whether to use human-like typing
 
+// Master control - pause/resume all AI features
+let masterEnabled = true;
+
+// Cached config (loaded once at startup)
+let cachedEnv = null;
+
+// Keystroke monitor restart settings
+const MONITOR_RESTART_DELAY = 2000;  // 2 seconds
+const MONITOR_MAX_RESTARTS = 5;
+let monitorRestartCount = 0;
+let monitorRestartTimer = null;
+
 /** Fix inverted caps (e.g. "hELLO" -> "Hello", "i" -> "I", "HOPE" -> "Hope") from Caps Lock or odd transcription. */
 function fixInvertedCaps(str) {
   if (typeof str !== 'string' || !str) return str;
@@ -47,6 +59,65 @@ let isVoiceRecording = false;
 
 // Auto-inject mode (autonomous - no suggestion popup)
 let autoInjectEnabled = false;
+
+// Live mode (auto-suggestion on typing pause)
+let liveModeEnabled = false;
+
+// Load and cache environment/config once at startup
+function loadCachedConfig() {
+  const fs = require('fs');
+  cachedEnv = { ...process.env };
+
+  const configFiles = ['.env', 'config.example.env', 'config.env'];
+  for (const configFile of configFiles) {
+    const configPath = path.join(__dirname, configFile);
+    if (fs.existsSync(configPath)) {
+      try {
+        const configContent = fs.readFileSync(configPath, 'utf8');
+
+        // Mistral API key
+        const mistralKeyMatch = configContent.match(/MISTRAL_API_KEY\s*=\s*([^\s#\n]+)/);
+        if (mistralKeyMatch) {
+          const apiKey = mistralKeyMatch[1].trim().replace(/^["']|["']$/g, '');
+          if (apiKey && apiKey !== 'your-api-key-here') {
+            cachedEnv.MISTRAL_API_KEY = apiKey;
+          }
+        }
+
+        // Replicate API key
+        const replicateMatch = configContent.match(/REPLICATE_API_TOKEN\s*=\s*([^\s#\n]+)/);
+        if (replicateMatch) {
+          const apiKey = replicateMatch[1].trim().replace(/^["']|["']$/g, '');
+          if (apiKey && apiKey !== 'your-api-key-here') {
+            cachedEnv.REPLICATE_API_TOKEN = apiKey;
+          }
+        }
+
+        // Google API key (fallback)
+        const googleKeyMatch = configContent.match(/GOOGLE_API_KEY\s*=\s*([^\s#\n]+)/);
+        if (googleKeyMatch) {
+          const apiKey = googleKeyMatch[1].trim().replace(/^["']|["']$/g, '');
+          if (apiKey && apiKey !== 'your-api-key-here') {
+            cachedEnv.GOOGLE_API_KEY = apiKey;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to read config file:', configFile, err.message);
+      }
+    }
+  }
+
+  console.log('Config loaded. Mistral key present:', !!cachedEnv.MISTRAL_API_KEY);
+}
+
+// Load settings from localStorage via IPC
+function loadSavedSettings() {
+  // Settings will be synced when settings window opens
+  // For now, just ensure defaults are set
+  autoInjectEnabled = false;
+  humanizeTyping = false;
+  masterEnabled = true;
+}
 
 function createWindow() {
   const { screen } = require('electron');
@@ -139,7 +210,7 @@ function createSettingsWindow() {
 
   // macOS-style settings panel
   const windowWidth = 420;
-  const windowHeight = 380;
+  const windowHeight = 520;  // Increased for Live Mode toggle
 
   // Position near center-top of screen
   const x = Math.round(workArea.x + (workArea.width - windowWidth) / 2);
@@ -211,11 +282,25 @@ function startKeystrokeMonitor() {
     console.log('Keystroke monitor exited with code:', code);
     keystrokeMonitor = null;
     keystrokeMonitorRL = null;
+
+    // Auto-restart if unexpected exit and master is enabled
+    if (masterEnabled && code !== 0 && monitorRestartCount < MONITOR_MAX_RESTARTS) {
+      monitorRestartCount++;
+      console.log(`Restarting keystroke monitor (attempt ${monitorRestartCount}/${MONITOR_MAX_RESTARTS})...`);
+      monitorRestartTimer = setTimeout(() => {
+        startKeystrokeMonitor();
+      }, MONITOR_RESTART_DELAY);
+    } else if (monitorRestartCount >= MONITOR_MAX_RESTARTS) {
+      console.error('Keystroke monitor failed too many times. Manual restart required.');
+    }
   });
 
   keystrokeMonitor.on('error', (err) => {
     console.error('Failed to start keystroke monitor:', err);
   });
+
+  // Reset restart count on successful start
+  monitorRestartCount = 0;
 }
 
 function sendToMonitor(command) {
@@ -256,8 +341,14 @@ function stopKeystrokeMonitor() {
 }
 
 async function handleKeystrokeEvent(event) {
+  // Skip all processing if master is disabled
+  if (!masterEnabled && event.event === 'trigger') {
+    console.log('Master disabled, ignoring trigger');
+    return;
+  }
+
   if (event.event === 'trigger') {
-    // Backtick or extension trigger from keystroke monitor
+    // Backtick, extension, or live trigger from keystroke monitor
     const { type, buffer, char_count, window: windowTitle, last_ai_output } = event;
 
     console.log('Trigger received - type:', type, 'buffer:', buffer, 'char_count:', char_count);
@@ -268,19 +359,29 @@ async function handleKeystrokeEvent(event) {
       return;
     }
 
+    // For live mode, check if it's enabled
+    if (type === 'live' && !liveModeEnabled) {
+      console.log('Live mode disabled, ignoring live trigger');
+      return;
+    }
+
+    // Limit buffer size for safety (max 10KB)
+    const MAX_BUFFER_SIZE = 10000;
+    const safeBuffer = buffer.length > MAX_BUFFER_SIZE ? buffer.substring(0, MAX_BUFFER_SIZE) : buffer;
+
     // Store the backspace count for injection
     pendingBackspaceCount = char_count;
-    triggerMode = type;  // 'backtick' or 'extension'
+    triggerMode = type;  // 'backtick', 'extension', or 'live'
 
     // Generate AI suggestion
     try {
       let result;
       if (type === 'extension' && last_ai_output) {
         // Extension mode - continue writing
-        result = await generateTextForMode('extension', buffer, last_ai_output);
+        result = await generateTextForMode('extension', safeBuffer, last_ai_output);
       } else {
-        // Backtick mode - grammar/spelling fix
-        result = await generateTextForMode('backtick', buffer);
+        // Backtick or Live mode - grammar/spelling fix
+        result = await generateTextForMode('backtick', safeBuffer);
       }
 
       if (result && result.text) {
@@ -290,7 +391,7 @@ async function handleKeystrokeEvent(event) {
         sendToMonitor({
           cmd: 'set_ai_output',
           output: result.text,
-          context: buffer
+          context: safeBuffer
         });
 
         if (autoInjectEnabled) {
@@ -412,25 +513,8 @@ async function generateTextForMode(mode, buffer, extraParam = null) {
 
     const args = [pythonScript, promptJson, contextJson];
 
-    // Load API key from env
-    const fs = require('fs');
-    let env = { ...process.env };
-    const configFiles = ['.env', 'config.example.env', 'config.env'];
-    for (const configFile of configFiles) {
-      const configPath = path.join(__dirname, configFile);
-      if (fs.existsSync(configPath)) {
-        try {
-          const configContent = fs.readFileSync(configPath, 'utf8');
-          const mistralKeyMatch = configContent.match(/MISTRAL_API_KEY\s*=\s*([^\s#\n]+)/);
-          if (mistralKeyMatch) {
-            const apiKey = mistralKeyMatch[1].trim().replace(/^["']|["']$/g, '');
-            if (apiKey && apiKey !== 'your-api-key-here') {
-              env.MISTRAL_API_KEY = apiKey;
-            }
-          }
-        } catch (err) {}
-      }
-    }
+    // Use cached env (loaded once at startup)
+    const env = cachedEnv || process.env;
 
     // Use spawn without shell to avoid escaping issues
     const pythonProcess = spawn('python', args, {
@@ -547,25 +631,8 @@ async function processVisionAnalysis(instruction) {
   try {
     const instructionJson = JSON.stringify(instruction || '');
 
-    // Load API key from env
-    const fs = require('fs');
-    let env = { ...process.env };
-    const configFiles = ['.env', 'config.env'];
-    for (const configFile of configFiles) {
-      const configPath = path.join(__dirname, configFile);
-      if (fs.existsSync(configPath)) {
-        try {
-          const configContent = fs.readFileSync(configPath, 'utf8');
-          const replicateMatch = configContent.match(/REPLICATE_API_TOKEN\s*=\s*([^\s#\n]+)/);
-          if (replicateMatch) {
-            const apiKey = replicateMatch[1].trim().replace(/^["']|["']$/g, '');
-            if (apiKey && apiKey !== 'your-api-key-here') {
-              env.REPLICATE_API_TOKEN = apiKey;
-            }
-          }
-        } catch (err) {}
-      }
-    }
+    // Use cached env (loaded once at startup)
+    const env = cachedEnv || process.env;
 
     const pythonProcess = spawn('python', [pythonScript, instructionJson], {
       cwd: __dirname,
@@ -695,6 +762,10 @@ async function handleClipboardTrigger() {
 
 // Register global shortcut to toggle window (Ctrl+Shift+Space)
 app.whenReady().then(() => {
+  // Load config once at startup
+  loadCachedConfig();
+  loadSavedSettings();
+
   createWindow();
   createOutputWindow();
 
@@ -1019,38 +1090,8 @@ ipcMain.handle('generate-text', async (event, prompt, context) => {
       args.push(contextJson);
     }
 
-    // Try to read API key from config file and pass as environment variable
-    const fs = require('fs');
-    let env = { ...process.env };
-    
-    // Try to read from config.example.env or .env
-    const configFiles = ['.env', 'config.example.env', 'config.env'];
-    for (const configFile of configFiles) {
-      const configPath = path.join(__dirname, configFile);
-      if (fs.existsSync(configPath)) {
-        try {
-          const configContent = fs.readFileSync(configPath, 'utf8');
-          // Try Mistral API key first, then fallback to Google for compatibility
-          const mistralKeyMatch = configContent.match(/MISTRAL_API_KEY\s*=\s*([^\s#\n]+)/);
-          const googleKeyMatch = configContent.match(/GOOGLE_API_KEY\s*=\s*([^\s#\n]+)/);
-          
-          if (mistralKeyMatch) {
-            const apiKey = mistralKeyMatch[1].trim().replace(/^["']|["']$/g, '');
-            if (apiKey && apiKey !== 'your-api-key-here') {
-              env.MISTRAL_API_KEY = apiKey;
-            }
-          } else if (googleKeyMatch) {
-            // Fallback to Google API key for backward compatibility
-            const apiKey = googleKeyMatch[1].trim().replace(/^["']|["']$/g, '');
-            if (apiKey && apiKey !== 'your-api-key-here') {
-              env.GOOGLE_API_KEY = apiKey;
-            }
-          }
-        } catch (err) {
-          // Could not read config file
-        }
-      }
-    }
+    // Use cached env (loaded once at startup)
+    const env = cachedEnv || process.env;
 
     // Use spawn without shell to avoid escaping issues
     const pythonProcess = spawn('python', args, {
@@ -1191,6 +1232,39 @@ ipcMain.on('close-settings-window', () => {
 // IPC handler for humanize toggle from settings
 ipcMain.on('settings-humanize-toggle', (event, enabled) => {
   humanizeTyping = enabled;
+});
+
+// IPC handler for master on/off toggle
+ipcMain.on('settings-master-toggle', (event, enabled) => {
+  masterEnabled = enabled;
+  console.log('Master enabled:', masterEnabled);
+
+  // Stop or start keystroke monitor based on master state
+  if (!masterEnabled) {
+    // Clear any pending restart
+    if (monitorRestartTimer) {
+      clearTimeout(monitorRestartTimer);
+      monitorRestartTimer = null;
+    }
+  }
+});
+
+// IPC handler to get current settings state
+ipcMain.handle('get-settings-state', async () => {
+  return {
+    masterEnabled,
+    autoInjectEnabled,
+    humanizeEnabled: humanizeTyping,
+    liveModeEnabled
+  };
+});
+
+// IPC handler for live mode toggle
+ipcMain.on('settings-live-mode-toggle', (event, enabled) => {
+  liveModeEnabled = enabled;
+  console.log('Live mode enabled:', liveModeEnabled);
+  // Tell keystroke monitor about live mode state
+  sendToMonitor({ cmd: 'set_live_mode', enabled: liveModeEnabled });
 });
 
 // IPC handler for auto-inject (autonomous mode - no suggestion popup)

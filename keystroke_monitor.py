@@ -61,6 +61,24 @@ LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "keylog.json
 # Pause threshold for logging (seconds)
 PAUSE_THRESHOLD = 1.0
 
+# Maximum buffer size (characters) to prevent memory issues
+MAX_BUFFER_SIZE = 10000
+
+# Maximum log entries to keep
+MAX_LOG_ENTRIES = 500
+
+# Maximum characters per log entry
+MAX_ENTRY_LENGTH = 2000
+
+# Window check frequency (every N keystrokes) - performance optimization
+WINDOW_CHECK_INTERVAL = 100
+
+# Live mode pause threshold for auto-suggestion (seconds)
+LIVE_MODE_PAUSE_THRESHOLD = 1.5
+
+# Minimum characters before live suggestion triggers
+LIVE_MODE_MIN_CHARS = 3
+
 
 # ============== Global State ==============
 
@@ -84,6 +102,14 @@ class KeystrokeState:
         self.last_keystroke_time = 0  # Timestamp of last keystroke
         self.pending_log_text = ""  # Text waiting to be logged
         self.pending_log_window = ""  # Window for pending log
+
+        # Performance: keystroke counter for window check optimization
+        self._key_counter = 0
+
+        # Live mode (auto-suggestion on pause)
+        self.live_mode_enabled = False
+        self.live_suggestion_timer = None
+        self.live_suggestion_pending = False  # Prevent duplicate triggers
 
 state = KeystrokeState()
 
@@ -145,9 +171,12 @@ def check_window_change():
 
             # Flush pending log before switching
             if state.pending_log_text:
-                save_log_entry(state.pending_log_text, state.pending_log_window)
+                # Save in background to not block
+                text = state.pending_log_text
+                window = state.pending_log_window
                 state.pending_log_text = ""
                 state.pending_log_window = ""
+                threading.Thread(target=save_log_entry, args=(text, window), daemon=True).start()
 
             state.last_window = window_title
             state.last_window_process = process_name
@@ -179,13 +208,18 @@ def check_window_change():
 
 def save_log_entry(text, window):
     """Save a complete text entry to the log file."""
-    if not text.strip():
+    text = text.strip()
+    if not text:
         return
+
+    # Limit entry length
+    if len(text) > MAX_ENTRY_LENGTH:
+        text = text[:MAX_ENTRY_LENGTH]
 
     entry = {
         "timestamp": datetime.now().isoformat(),
         "text": text,
-        "window": window
+        "window": window[:200] if window else ""  # Limit window title length
     }
 
     try:
@@ -203,13 +237,13 @@ def save_log_entry(text, window):
         # Append new entry
         existing.append(entry)
 
-        # Keep only last 1000 entries
-        if len(existing) > 1000:
-            existing = existing[-1000:]
+        # Keep only last N entries (reduced for performance)
+        if len(existing) > MAX_LOG_ENTRIES:
+            existing = existing[-MAX_LOG_ENTRIES:]
 
-        # Write back
+        # Write back (minimal formatting for smaller file)
         with open(LOG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(existing, f, indent=2)
+            json.dump(existing, f, separators=(',', ':'))
 
     except Exception as e:
         send_event({"event": "error", "message": f"Log save failed: {str(e)}"})
@@ -217,18 +251,39 @@ def save_log_entry(text, window):
 
 def check_pause_and_log():
     """Check if there's been a pause and log the pending text."""
+    # Quick check WITHOUT lock first (performance optimization)
+    if not state.pending_log_text or state.last_keystroke_time == 0:
+        return
+
+    time_since_last = time.time() - state.last_keystroke_time
+    if time_since_last < PAUSE_THRESHOLD:
+        return
+
+    # Only lock if we're actually going to save
+    text = None
+    window = None
     with state.lock:
-        if state.pending_log_text and state.last_keystroke_time > 0:
-            time_since_last = time.time() - state.last_keystroke_time
-            if time_since_last >= PAUSE_THRESHOLD:
-                save_log_entry(state.pending_log_text, state.pending_log_window)
-                state.pending_log_text = ""
-                state.pending_log_window = ""
+        if state.pending_log_text:  # Double-check after lock
+            text = state.pending_log_text
+            window = state.pending_log_window
+            state.pending_log_text = ""
+            state.pending_log_window = ""
+
+    # Save in background thread (don't block main loop)
+    if text:
+        threading.Thread(target=save_log_entry, args=(text, window), daemon=True).start()
 
 
 def add_to_pending_log(char):
     """Add a character to the pending log text."""
     with state.lock:
+        # Limit pending log size
+        if len(state.pending_log_text) >= MAX_ENTRY_LENGTH:
+            # Save current and start fresh (in background)
+            text = state.pending_log_text
+            window = state.pending_log_window
+            state.pending_log_text = ""
+            threading.Thread(target=save_log_entry, args=(text, window), daemon=True).start()
         state.pending_log_text += char
         state.pending_log_window = state.last_window
         state.last_keystroke_time = time.time()
@@ -300,6 +355,12 @@ def handle_command(cmd_data):
         # Manual trigger from Electron (Ctrl+Alt+Enter)
         handle_backtick()
 
+    elif cmd == "set_live_mode":
+        # Toggle live mode (auto-suggestion on pause)
+        with state.lock:
+            state.live_mode_enabled = cmd_data.get("enabled", False)
+        send_event({"event": "live_mode_set", "enabled": state.live_mode_enabled})
+
 
 def stdin_reader():
     """Read commands from stdin in a separate thread."""
@@ -323,6 +384,67 @@ def stdin_reader():
             break
 
 
+# ============== Live Mode Auto-Trigger ==============
+
+def trigger_live_suggestion():
+    """Auto-trigger suggestion after pause in live mode."""
+    with state.lock:
+        # Check if still valid to trigger
+        if not state.live_mode_enabled:
+            return
+        if state.live_suggestion_pending:
+            return
+        if len(state.buffer) < LIVE_MODE_MIN_CHARS:
+            return
+
+        # Mark as pending to prevent duplicates
+        state.live_suggestion_pending = True
+
+        # Get buffer content (limit size)
+        if len(state.buffer) > 5000:
+            buffer_text = "".join(state.buffer[-5000:])
+        else:
+            buffer_text = "".join(state.buffer)
+
+        char_count = state.raw_count
+
+        # Send live trigger event to Electron
+        send_event({
+            "event": "trigger",
+            "type": "live",
+            "buffer": buffer_text,
+            "char_count": char_count,
+            "window": state.last_window
+        })
+
+
+def cancel_live_timer():
+    """Cancel any pending live suggestion timer."""
+    if state.live_suggestion_timer:
+        state.live_suggestion_timer.cancel()
+        state.live_suggestion_timer = None
+
+
+def start_live_timer():
+    """Start timer for live mode auto-suggestion."""
+    if not state.live_mode_enabled:
+        return
+
+    # Cancel existing timer
+    cancel_live_timer()
+
+    # Reset pending flag when starting new timer
+    state.live_suggestion_pending = False
+
+    # Start new timer
+    state.live_suggestion_timer = threading.Timer(
+        LIVE_MODE_PAUSE_THRESHOLD,
+        trigger_live_suggestion
+    )
+    state.live_suggestion_timer.daemon = True
+    state.live_suggestion_timer.start()
+
+
 # ============== Keystroke Handling ==============
 
 def handle_backtick():
@@ -339,8 +461,12 @@ def handle_backtick():
         state.last_trigger_time = current_time
         state.last_trigger_had_typing = False
 
-        # Get buffer content
-        buffer_text = "".join(state.buffer)
+        # Get buffer content (limit size for performance)
+        if len(state.buffer) > 5000:
+            buffer_text = "".join(state.buffer[-5000:])  # Last 5000 chars only
+        else:
+            buffer_text = "".join(state.buffer)
+
         char_count = state.raw_count
 
         # Determine trigger type
@@ -372,8 +498,11 @@ def on_key_event(event):
     if event.event_type != keyboard.KEY_DOWN:
         return
 
-    # Check for window change
-    check_window_change()
+    # Performance: Only check window every N keystrokes
+    state._key_counter += 1
+    if state._key_counter >= WINDOW_CHECK_INTERVAL:
+        state._key_counter = 0
+        check_window_change()
 
     # Skip if in private context
     if state.is_private:
@@ -389,37 +518,51 @@ def on_key_event(event):
                     state.buffer.pop()
                 state.raw_count += 1
                 state.last_trigger_had_typing = True
+                state.live_suggestion_pending = False  # Reset on edit
             backspace_pending_log()
+            start_live_timer()  # Restart timer
 
         elif key_name == 'enter':
             with state.lock:
                 state.buffer.append('\n')
                 state.raw_count += 1
                 state.last_trigger_had_typing = True
+                state.live_suggestion_pending = False
             add_to_pending_log('\n')
+            cancel_live_timer()  # Don't trigger on enter
 
         elif key_name == 'space':
             with state.lock:
                 state.buffer.append(' ')
                 state.raw_count += 1
                 state.last_trigger_had_typing = True
+                state.live_suggestion_pending = False
             add_to_pending_log(' ')
+            start_live_timer()  # Restart timer
 
         elif key_name == 'tab':
             with state.lock:
                 state.buffer.append('\t')
                 state.raw_count += 1
                 state.last_trigger_had_typing = True
+                state.live_suggestion_pending = False
             add_to_pending_log('\t')
+            start_live_timer()  # Restart timer
 
         elif len(key_name) == 1:
             # Regular character (but not backtick - handled separately)
             if key_name != '`':
                 with state.lock:
+                    # Limit buffer size to prevent memory issues
+                    if len(state.buffer) >= MAX_BUFFER_SIZE:
+                        # Remove oldest characters
+                        state.buffer = state.buffer[-(MAX_BUFFER_SIZE - 1):]
                     state.buffer.append(key_name)
                     state.raw_count += 1
                     state.last_trigger_had_typing = True
+                    state.live_suggestion_pending = False
                 add_to_pending_log(key_name)
+                start_live_timer()  # Restart timer on character
 
         # Ignore other special keys (shift, ctrl, alt, etc.)
 
@@ -433,7 +576,7 @@ def pause_monitor():
     """Periodically check for typing pauses to save logs."""
     while state.running:
         check_pause_and_log()
-        time.sleep(0.2)  # Check every 200ms
+        time.sleep(0.5)  # Check every 500ms (optimized from 200ms)
 
 
 # ============== Window Monitor Thread ==============
@@ -442,7 +585,7 @@ def window_monitor():
     """Periodically check for window changes."""
     while state.running:
         check_window_change()
-        time.sleep(0.5)  # Check every 500ms
+        time.sleep(1.0)  # Check every 1 second (optimized from 500ms)
 
 
 # ============== Main ==============
@@ -478,6 +621,7 @@ def main():
     finally:
         # Cleanup
         keyboard.unhook_all()
+        cancel_live_timer()  # Cancel any pending live timer
         # Flush any pending log
         with state.lock:
             if state.pending_log_text:

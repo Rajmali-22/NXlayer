@@ -44,16 +44,16 @@ def check_pause():
 
 
 def setup_pause_hotkey():
-    """Setup '.' key as pause/continue toggle."""
+    """Setup 'Ctrl+.' as pause/continue toggle."""
     if HAS_KEYBOARD:
-        kb.add_hotkey('.', toggle_pause, suppress=True)
+        kb.add_hotkey('ctrl+.', toggle_pause, suppress=True)
 
 
 def cleanup_pause_hotkey():
     """Remove pause hotkey."""
     if HAS_KEYBOARD:
         try:
-            kb.remove_hotkey('.')
+            kb.remove_hotkey('ctrl+.')
         except:
             pass
 

@@ -106,7 +106,7 @@ function createOutputWindow() {
     minimizable: false,
     maximizable: false,
     closable: false,
-    focusable: false,  // Don't steal focus from target app
+    focusable: true,  // Allow focus for vision input mode
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -372,6 +372,151 @@ async function showSuggestionAtCursor(text) {
   }
 }
 
+async function handleScreenshotTrigger() {
+  console.log('Screenshot trigger - showing vision input window');
+
+  triggerMode = 'screenshot';
+  pendingBackspaceCount = 0;
+
+  // Show the output window in vision-mode (with input field)
+  if (outputWindow) {
+    const { screen } = require('electron');
+    const cursor = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(cursor);
+    const workArea = display.workArea;
+    const [popupWidth, popupHeight] = outputWindow.getSize();
+
+    let x = cursor.x;
+    let y = cursor.y + 20;
+
+    if (y + popupHeight > workArea.y + workArea.height) {
+      y = cursor.y - popupHeight - 5;
+    }
+    if (x + popupWidth > workArea.x + workArea.width) {
+      x = workArea.x + workArea.width - popupWidth - 10;
+    }
+
+    x = Math.max(workArea.x, x);
+    y = Math.max(workArea.y, y);
+
+    outputWindow.setPosition(Math.round(x), Math.round(y));
+    outputWindow.show();
+    outputWindow.focus();
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+    outputWindow.webContents.send('vision-mode');
+  }
+}
+
+async function processVisionAnalysis(instruction) {
+  console.log('Processing vision analysis with instruction:', instruction);
+
+  // Hide window before taking screenshot (so it's not in the capture)
+  if (outputWindow) {
+    outputWindow.hide();
+  }
+
+  // Small delay to ensure window is hidden
+  await new Promise(resolve => setTimeout(resolve, 200));
+
+  // Call Python script for screenshot + vision
+  const pythonScript = path.join(__dirname, 'screenshot_vision.py');
+
+  try {
+    const instructionJson = JSON.stringify(instruction || '');
+
+    // Load API key from env
+    const fs = require('fs');
+    let env = { ...process.env };
+    const configFiles = ['.env', 'config.env'];
+    for (const configFile of configFiles) {
+      const configPath = path.join(__dirname, configFile);
+      if (fs.existsSync(configPath)) {
+        try {
+          const configContent = fs.readFileSync(configPath, 'utf8');
+          const replicateMatch = configContent.match(/REPLICATE_API_TOKEN\s*=\s*([^\s#\n]+)/);
+          if (replicateMatch) {
+            const apiKey = replicateMatch[1].trim().replace(/^["']|["']$/g, '');
+            if (apiKey && apiKey !== 'your-api-key-here') {
+              env.REPLICATE_API_TOKEN = apiKey;
+            }
+          }
+        } catch (err) {}
+      }
+    }
+
+    const pythonProcess = spawn('python', [pythonScript, instructionJson], {
+      cwd: __dirname,
+      shell: false,
+      env: env
+    });
+
+    let output = '';
+    let errorOutput = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+      console.log('Screenshot vision debug:', data.toString());
+    });
+
+    pythonProcess.on('close', async (code) => {
+      let resultText = '';
+
+      if (code === 0 && output.trim()) {
+        try {
+          const result = JSON.parse(output.trim());
+          if (result.text) {
+            lastGeneratedText = result.text;
+            resultText = result.text;
+          } else if (result.error) {
+            console.error('Screenshot vision error:', result.error);
+            resultText = 'Error: ' + result.error;
+          }
+        } catch (e) {
+          console.error('Failed to parse screenshot vision output:', output);
+          resultText = 'Failed to parse response.';
+        }
+      } else {
+        console.error('Screenshot vision failed:', errorOutput);
+        resultText = 'Vision analysis failed. Check console for details.';
+      }
+
+      // Show window with result
+      if (outputWindow && resultText) {
+        const { screen } = require('electron');
+        const cursor = screen.getCursorScreenPoint();
+        const display = screen.getDisplayNearestPoint(cursor);
+        const workArea = display.workArea;
+        const [popupWidth, popupHeight] = outputWindow.getSize();
+
+        let x = cursor.x;
+        let y = cursor.y + 20;
+
+        if (y + popupHeight > workArea.y + workArea.height) {
+          y = cursor.y - popupHeight - 5;
+        }
+        if (x + popupWidth > workArea.x + workArea.width) {
+          x = workArea.x + workArea.width - popupWidth - 10;
+        }
+
+        x = Math.max(workArea.x, x);
+        y = Math.max(workArea.y, y);
+
+        outputWindow.setPosition(Math.round(x), Math.round(y));
+        outputWindow.show();
+        outputWindow.webContents.send('display-text', resultText);
+      }
+    });
+
+  } catch (error) {
+    console.error('Screenshot trigger error:', error);
+  }
+}
+
 async function handleClipboardTrigger() {
   // Read clipboard content
   const clipboardText = clipboard.readText();
@@ -452,6 +597,12 @@ app.whenReady().then(() => {
   } else {
     console.error('Failed to register Ctrl+Alt+Enter shortcut');
   }
+
+  // Register Ctrl+Shift+F for screenshot + vision trigger
+  const screenshotShortcut = globalShortcut.register('CommandOrControl+Shift+F', async () => {
+    console.log('Ctrl+Shift+F pressed - screenshot + vision trigger');
+    await handleScreenshotTrigger();
+  });
   
   // Register Ctrl+Shift+P to paste generated text using Python injection
   const pasteShortcut = globalShortcut.register('CommandOrControl+Shift+P', async () => {
@@ -857,6 +1008,12 @@ ipcMain.handle('hide-output', async () => {
   if (outputWindow) {
     outputWindow.hide();
   }
+});
+
+// IPC handler for vision analysis from output window
+ipcMain.handle('vision-analyze', async (event, instruction) => {
+  console.log('Vision analyze requested with instruction:', instruction);
+  await processVisionAnalysis(instruction);
 });
 
 // Store for global paste shortcut

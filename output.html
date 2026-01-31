@@ -26,6 +26,61 @@
             max-height: 100vh;
         }
 
+        .vision-input-container {
+            display: none;
+            padding: 8px 10px;
+        }
+
+        .vision-input-container.active {
+            display: block;
+        }
+
+        .vision-label {
+            color: #4fc3f7;
+            font-size: 11px;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .vision-icon {
+            font-size: 14px;
+        }
+
+        #vision-input {
+            width: 100%;
+            background: rgba(60, 60, 60, 0.9);
+            border: 1px solid rgba(100, 100, 100, 0.5);
+            border-radius: 4px;
+            padding: 8px 10px;
+            color: rgba(220, 220, 220, 0.95);
+            font-family: inherit;
+            font-size: 13px;
+            outline: none;
+            resize: none;
+        }
+
+        #vision-input:focus {
+            border-color: #4fc3f7;
+        }
+
+        #vision-input::placeholder {
+            color: rgba(150, 150, 150, 0.7);
+        }
+
+        .vision-status {
+            color: rgba(150, 150, 150, 0.8);
+            font-size: 11px;
+            margin-top: 6px;
+            display: none;
+        }
+
+        .vision-status.loading {
+            display: block;
+            color: #4fc3f7;
+        }
+
         .suggestion-text {
             padding: 8px 10px;
             color: rgba(200, 200, 200, 0.95);
@@ -35,6 +90,10 @@
             word-wrap: break-word;
             overflow-y: auto;
             max-height: calc(100vh - 28px);
+        }
+
+        .suggestion-text:empty {
+            display: none;
         }
 
         .suggestion-text::-webkit-scrollbar {
@@ -83,9 +142,17 @@
 </head>
 <body>
     <div class="suggestion-box">
+        <div id="vision-input-container" class="vision-input-container">
+            <div class="vision-label">
+                <span class="vision-icon">📷</span>
+                <span>Screenshot Vision - What do you want to know?</span>
+            </div>
+            <input type="text" id="vision-input" placeholder="e.g., extract the code, summarize this, fix the error... (Enter to analyze)">
+            <div id="vision-status" class="vision-status">Analyzing screenshot...</div>
+        </div>
         <div id="suggestion-text" class="suggestion-text"></div>
         <div class="hint-bar">
-            <span class="hint"><kbd>Ctrl+Shift+P</kbd> paste</span>
+            <span id="hint-text" class="hint"><kbd>Ctrl+Shift+P</kbd> paste</span>
             <span class="esc">Esc close</span>
         </div>
     </div>
@@ -94,10 +161,43 @@
         const { ipcRenderer } = require('electron');
 
         const suggestionText = document.getElementById('suggestion-text');
+        const visionInputContainer = document.getElementById('vision-input-container');
+        const visionInput = document.getElementById('vision-input');
+        const visionStatus = document.getElementById('vision-status');
+        const hintText = document.getElementById('hint-text');
+
+        let isVisionMode = false;
+
+        // Show vision input mode
+        ipcRenderer.on('vision-mode', (event) => {
+            isVisionMode = true;
+            visionInputContainer.classList.add('active');
+            suggestionText.textContent = '';
+            visionInput.value = '';
+            visionStatus.classList.remove('loading');
+            hintText.innerHTML = '<kbd>Enter</kbd> analyze';
+            setTimeout(() => visionInput.focus(), 100);
+        });
 
         // Listen for text to display
         ipcRenderer.on('display-text', (event, text) => {
+            isVisionMode = false;
+            visionInputContainer.classList.remove('active');
+            visionStatus.classList.remove('loading');
+            visionInput.disabled = false;
             suggestionText.textContent = text;
+            hintText.innerHTML = '<kbd>Ctrl+Shift+P</kbd> paste';
+        });
+
+        // Vision input Enter key
+        visionInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                const instruction = visionInput.value.trim();
+                visionStatus.classList.add('loading');
+                visionInput.disabled = true;
+                ipcRenderer.invoke('vision-analyze', instruction);
+            }
         });
 
         // Escape key to close

@@ -12,7 +12,10 @@
       "Bash(git commit -m \"$\\(cat <<''EOF''\nRemove unused continus_keystrok module\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(timeout:*)",
       "Bash(npm stop)",
-      "Bash(del \"C:\\\\Users\\\\rajma\\\\Desktop\\\\zenth\\\\ai-text-bot\\\\keylog.json\")"
+      "Bash(del \"C:\\\\Users\\\\rajma\\\\Desktop\\\\zenth\\\\ai-text-bot\\\\keylog.json\")",
+      "WebSearch",
+      "WebFetch(domain:replicate.com)",
+      "Bash(node --check:*)"
     ]
   }
 }

@@ -1,0 +1,272 @@
+================================================================================
+                         AI TEXT BOT - DOCUMENTATION
+================================================================================
+
+SUMMARY
+-------
+AI Text Bot is an Electron-based desktop application that provides AI-powered
+text assistance through multiple trigger modes. It monitors keystrokes, captures
+screenshots, and uses AI to fix grammar, extend writing, analyze images, and
+process clipboard content - all injected directly where you type.
+
+Features:
+- System-wide keystroke monitoring with privacy filters
+- Multiple AI trigger modes (grammar fix, extend, clipboard, vision)
+- Keyboard text injection with optional humanize typing
+- Pause/continue during injection with '.' key
+- Voice-to-text support
+- Screenshot + Vision AI analysis
+
+================================================================================
+
+KEYBOARD SHORTCUTS
+------------------
+
+1. Ctrl+Alt+Enter - GRAMMAR/SPELLING FIX (Backtick Mode)
+   Fixes grammar and spelling of recently typed text.
+   - Monitors your keystrokes in the current window
+   - Sends text to AI for correction
+   - Backspaces old text and injects corrected version
+
+2. Ctrl+Alt+Enter (Double Press within 2 seconds) - EXTENSION MODE
+   Continues writing from where you left off.
+   - Only activates if no new typing between triggers
+   - AI extends your text naturally
+   - Injects continuation without deleting original
+
+3. Ctrl+Shift+D - CLIPBOARD TRIGGER
+   Processes clipboard content with auto-detection.
+   - Detects content type: code, email, question, general text
+   - Applies appropriate AI processing
+   - Injects result at cursor
+
+4. Ctrl+Shift+D (with typed instruction) - CLIPBOARD + INSTRUCTION
+   Process clipboard with custom instruction.
+   - Type your instruction first (e.g., "translate to spanish")
+   - Press Ctrl+Shift+D
+   - AI processes clipboard using your instruction
+   - Erases instruction and injects result
+
+5. Ctrl+Shift+F - SCREENSHOT + VISION
+   Captures screen and sends to Vision AI.
+   - Takes full screen screenshot
+   - Optionally include typed instruction for context
+   - Uses LLaVA-13b model via Replicate
+   - Injects AI response at cursor
+
+6. Escape - CANCEL/CLEAR
+   Cancels current operation and clears all state.
+
+7. Ctrl+. - PAUSE/CONTINUE INJECTION
+   Pauses or resumes text injection mid-process.
+
+================================================================================
+
+INSTALLATION & SETUP
+--------------------
+
+1. Prerequisites:
+   - Node.js (v16+)
+   - Python 3.8+
+   - Windows OS (for pywin32)
+
+2. Install Node dependencies:
+   npm install
+
+3. Install Python dependencies:
+   pip install -r requirements.txt
+
+4. Configure API keys in .env file:
+   MISTRAL_API_KEY=your-mistral-api-key
+   OPENAI_API_KEY=your-openai-api-key
+   REPLICATE_API_TOKEN=your-replicate-token
+
+5. Run the application:
+   npm start
+
+================================================================================
+
+CONFIGURATION (.env)
+--------------------
+
+MISTRAL_API_KEY
+  - Required for text AI (grammar, extension, clipboard processing)
+  - Get from: https://console.mistral.ai/api-keys/
+
+OPENAI_API_KEY
+  - Required for voice-to-text (Whisper)
+  - Get from: https://platform.openai.com/api-keys
+
+REPLICATE_API_TOKEN
+  - Required for screenshot vision (LLaVA-13b)
+  - Get from: https://replicate.com/account/api-tokens
+
+================================================================================
+
+USAGE EXAMPLES
+--------------
+
+EXAMPLE 1: Grammar Fix
+----------------------
+You type:  "i went too the store and buyed some apples"
+Press:     Ctrl+Alt+Enter
+Result:    Text is replaced with "I went to the store and bought some apples"
+
+EXAMPLE 2: Extension Mode
+-------------------------
+You type:  "The quick brown fox"
+Press:     Ctrl+Alt+Enter
+Wait:      Text is corrected (if needed)
+Press:     Ctrl+Alt+Enter again within 2 seconds (don't type anything)
+Result:    AI continues: "jumped over the lazy dog..."
+
+EXAMPLE 3: Clipboard Processing
+-------------------------------
+Copy:      Some Python code with a bug
+Press:     Ctrl+Shift+D
+Result:    AI detects it's code, fixes the bug, injects corrected version
+
+EXAMPLE 4: Clipboard with Instruction
+-------------------------------------
+Copy:      "Hello, how are you?"
+Type:      "translate to french"
+Press:     Ctrl+Shift+D
+Result:    "translate to french" is erased, "Bonjour, comment allez-vous?" is injected
+
+EXAMPLE 5: Screenshot Vision
+----------------------------
+Open:      A webpage or document you want analyzed
+Type:      "what is the main topic of this page" (optional)
+Press:     Ctrl+Shift+F
+Result:    Screenshot taken, AI analyzes and describes the content
+
+EXAMPLE 6: Pause During Injection
+---------------------------------
+Press:     Ctrl+Alt+Enter (AI starts typing long response)
+Press:     Ctrl+. (injection pauses)
+Do:        Something else
+Press:     Ctrl+. (injection resumes from where it stopped)
+
+================================================================================
+
+HUMANIZE TYPING MODE
+--------------------
+
+Toggle the "Human" switch in the overlay window to enable humanize mode.
+
+When enabled:
+- Variable typing speed (30-120ms between keys)
+- Occasional typos with quick corrections (2% rate)
+- Natural pauses after punctuation
+- Thinking hesitations
+
+When disabled (default):
+- Fast direct typing (1ms between keys)
+- No typos
+- Consistent speed
+
+================================================================================
+
+PRIVACY FILTERS
+---------------
+
+The keystroke monitor automatically stops logging when you're in:
+- Banking applications (names containing "bank", "chase", "wells fargo", etc.)
+- Google Pay
+- Password managers (1Password, LastPass, Bitwarden, KeePass, Dashlane)
+- Any window with "password" or "login" in the title
+
+Filtered keystrokes are not stored or sent to any AI service.
+
+================================================================================
+
+FILE STRUCTURE
+--------------
+
+main.js              - Electron main process, handles shortcuts and IPC
+index.html           - Overlay window UI
+renderer.js          - Frontend logic
+styles.css           - UI styling
+text_ai_backend.py   - Mistral AI text processing
+screenshot_vision.py - Screenshot capture + Replicate Vision API
+keyboard_inject.py   - Text injection with humanize option
+keystroke_monitor.py - System-wide keystroke capture
+voice_to_text.py     - OpenAI Whisper integration
+keylog.json          - Local keystroke log (privacy filtered)
+.env                 - API keys configuration
+requirements.txt     - Python dependencies
+
+================================================================================
+
+ARCHITECTURE
+------------
+
+                    +------------------+
+                    |   Electron App   |
+                    |    (main.js)     |
+                    +--------+---------+
+                             |
+          +------------------+------------------+
+          |                  |                  |
+    +-----v-----+     +------v------+    +------v------+
+    | Keystroke |     | Text AI     |    | Screenshot  |
+    | Monitor   |     | Backend     |    | Vision      |
+    | (Python)  |     | (Python)    |    | (Python)    |
+    +-----------+     +-------------+    +-------------+
+          |                  |                  |
+          v                  v                  v
+    System-wide        Mistral AI         Replicate API
+    Key Capture        (Grammar/Ext)      (LLaVA-13b)
+          |                  |                  |
+          +------------------+------------------+
+                             |
+                    +--------v---------+
+                    | Keyboard Inject  |
+                    |    (Python)      |
+                    +------------------+
+                             |
+                             v
+                    Text injected at cursor
+
+Flow:
+1. User triggers shortcut
+2. Electron captures and routes to appropriate handler
+3. Python backend processes (AI call or screenshot)
+4. Result sent back to Electron
+5. keyboard_inject.py types text at cursor position
+
+================================================================================
+
+TROUBLESHOOTING
+---------------
+
+Q: Shortcuts not working?
+A: Run as administrator. Some apps block global shortcuts.
+
+Q: AI gives preambles instead of just fixed text?
+A: This shouldn't happen with current prompts. Check text_ai_backend.py.
+
+Q: Keystroke monitor not capturing?
+A: Check if another app has exclusive keyboard access. Restart the app.
+
+Q: Vision feature not working?
+A: Verify REPLICATE_API_TOKEN in .env file.
+
+Q: Text injection is slow?
+A: Disable humanize mode (toggle off the "Human" switch).
+
+================================================================================
+
+VERSION HISTORY
+---------------
+
+Current: Merged V2 with keystroke monitoring and vision features
+- System-wide keystroke capture
+- Multiple trigger modes
+- Humanize typing with typo simulation
+- Pause/continue injection
+- Screenshot + Vision AI
+- Privacy filters
+- Clipboard processing with auto-detect
+
+================================================================================

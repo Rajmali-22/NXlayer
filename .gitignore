@@ -14,3 +14,4 @@ build/
 *.rpm
 nul
 keylog.json
+.claude/

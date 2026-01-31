@@ -33,6 +33,12 @@ let pendingBackspaceCount = 0;  // Number of backspaces to send before injecting
 let triggerMode = null;  // 'backtick', 'extension', 'clipboard', or 'prompt'
 let humanizeTyping = false;  // Whether to use human-like typing
 
+// AI Backend service state (persistent process)
+let aiBackend = null;
+let aiBackendRL = null;
+let pendingAIRequest = null;  // { resolve, reject, streaming, text }
+let aiBackendReady = false;
+
 // Master control - pause/resume all AI features
 let masterEnabled = true;
 
@@ -340,6 +346,187 @@ function stopKeystrokeMonitor() {
   }
 }
 
+// ============== AI Backend Service (Persistent) ==============
+
+function startAIBackend() {
+  const pythonScript = path.join(__dirname, 'ai_backend_service.py');
+
+  // Use cached env (loaded once at startup)
+  const env = cachedEnv || process.env;
+
+  aiBackend = spawn('python', [pythonScript], {
+    cwd: __dirname,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: env
+  });
+
+  // Read events from backend's stdout
+  aiBackendRL = readline.createInterface({
+    input: aiBackend.stdout,
+    crlfDelay: Infinity
+  });
+
+  aiBackendRL.on('line', (line) => {
+    try {
+      const event = JSON.parse(line);
+      handleAIBackendEvent(event);
+    } catch (e) {
+      console.error('Failed to parse AI backend event:', line, e);
+    }
+  });
+
+  aiBackend.stderr.on('data', (data) => {
+    console.log('AI backend debug:', data.toString());
+  });
+
+  aiBackend.on('close', (code) => {
+    console.log('AI backend exited with code:', code);
+    aiBackend = null;
+    aiBackendRL = null;
+    aiBackendReady = false;
+
+    // Auto-restart if master is enabled
+    if (masterEnabled && code !== 0) {
+      console.log('Restarting AI backend...');
+      setTimeout(startAIBackend, 2000);
+    }
+  });
+
+  aiBackend.on('error', (err) => {
+    console.error('Failed to start AI backend:', err);
+  });
+}
+
+function sendToAIBackend(command) {
+  if (aiBackend && aiBackend.stdin && aiBackendReady) {
+    console.log('Sending to AI backend:', JSON.stringify(command).substring(0, 100));
+    aiBackend.stdin.write(JSON.stringify(command) + '\n');
+    return true;
+  } else {
+    console.error('AI backend not ready');
+    return false;
+  }
+}
+
+function handleAIBackendEvent(event) {
+  if (event.event === 'started') {
+    console.log('AI backend started, success:', event.success, 'PID:', event.pid);
+    aiBackendReady = event.success;
+
+  } else if (event.event === 'chunk') {
+    // Streaming chunk received
+    if (pendingAIRequest && pendingAIRequest.streaming) {
+      pendingAIRequest.text += event.text;
+
+      // Send to output window for live display
+      if (outputWindow && !pendingAIRequest.autoInject) {
+        outputWindow.webContents.send('stream-chunk', event.text);
+      }
+
+      // If final chunk, complete the request
+      if (event.final) {
+        const finalText = pendingAIRequest.text;
+        if (outputWindow && !pendingAIRequest.autoInject) {
+          outputWindow.webContents.send('stream-end');
+        }
+        if (pendingAIRequest.resolve) {
+          pendingAIRequest.resolve({ text: finalText });
+        }
+        pendingAIRequest = null;
+      }
+    }
+
+  } else if (event.event === 'complete') {
+    // Non-streaming complete response
+    if (pendingAIRequest && pendingAIRequest.resolve) {
+      pendingAIRequest.resolve({ text: event.text });
+      pendingAIRequest = null;
+    }
+
+  } else if (event.event === 'error') {
+    console.error('AI backend error:', event.message);
+    if (pendingAIRequest && pendingAIRequest.reject) {
+      pendingAIRequest.reject(new Error(event.message));
+      pendingAIRequest = null;
+    }
+
+  } else if (event.event === 'pong') {
+    console.log('AI backend pong received');
+
+  } else if (event.event === 'stopped') {
+    console.log('AI backend stopped');
+  }
+}
+
+function stopAIBackend() {
+  if (aiBackend) {
+    sendToAIBackend({ cmd: 'shutdown' });
+    setTimeout(() => {
+      if (aiBackend) {
+        aiBackend.kill();
+      }
+    }, 1000);
+  }
+}
+
+// Generate text using persistent backend with streaming
+async function generateTextStreaming(mode, buffer, extraParam = null, autoInject = false) {
+  return new Promise((resolve, reject) => {
+    if (!aiBackendReady) {
+      reject(new Error('AI backend not ready'));
+      return;
+    }
+
+    // Build context
+    const context = { mode: mode };
+    if (mode === 'extension' && extraParam) {
+      context.last_output = extraParam;
+    } else if (mode === 'clipboard_with_instruction' && extraParam) {
+      context.instruction = extraParam;
+    }
+
+    // Show streaming UI if not auto-inject
+    if (outputWindow && !autoInject) {
+      outputWindow.webContents.send('stream-start');
+    }
+
+    // Set up pending request
+    pendingAIRequest = {
+      resolve,
+      reject,
+      streaming: true,
+      autoInject,
+      text: ''
+    };
+
+    // Send request to backend
+    const sent = sendToAIBackend({
+      cmd: 'generate',
+      prompt: buffer,
+      context: context,
+      streaming: true
+    });
+
+    if (!sent) {
+      pendingAIRequest = null;
+      reject(new Error('Failed to send to AI backend'));
+    }
+
+    // Timeout after 60 seconds
+    setTimeout(() => {
+      if (pendingAIRequest) {
+        const partialText = pendingAIRequest.text;
+        pendingAIRequest = null;
+        if (partialText) {
+          resolve({ text: partialText });
+        } else {
+          reject(new Error('AI request timeout'));
+        }
+      }
+    }, 60000);
+  });
+}
+
 async function handleKeystrokeEvent(event) {
   // Skip all processing if master is disabled
   if (!masterEnabled && event.event === 'trigger') {
@@ -373,15 +560,20 @@ async function handleKeystrokeEvent(event) {
     pendingBackspaceCount = char_count;
     triggerMode = type;  // 'backtick', 'extension', or 'live'
 
-    // Generate AI suggestion
+    // Generate AI suggestion (using streaming for low latency)
     try {
+      // Show output window BEFORE streaming starts (for non-auto-inject)
+      if (!autoInjectEnabled) {
+        await showOutputWindowAtCursor();
+      }
+
       let result;
       if (type === 'extension' && last_ai_output) {
         // Extension mode - continue writing
-        result = await generateTextForMode('extension', safeBuffer, last_ai_output);
+        result = await generateTextStreaming('extension', safeBuffer, last_ai_output, autoInjectEnabled);
       } else {
         // Backtick or Live mode - grammar/spelling fix
-        result = await generateTextForMode('backtick', safeBuffer);
+        result = await generateTextStreaming('backtick', safeBuffer, null, autoInjectEnabled);
       }
 
       if (result && result.text) {
@@ -405,13 +597,15 @@ async function handleKeystrokeEvent(event) {
           triggerMode = null;
           // Reset monitor again after injection to be safe
           sendToMonitor({ cmd: 'reset' });
-        } else {
-          // Suggestion mode: show popup for approval
-          await showSuggestionAtCursor(result.text);
         }
+        // Note: For suggestion mode, text is already displayed via streaming
       }
     } catch (error) {
       console.error('AI generation error:', error);
+      // Hide output window on error
+      if (outputWindow && !autoInjectEnabled) {
+        outputWindow.hide();
+      }
     }
 
   } else if (event.event === 'window_change') {
@@ -547,6 +741,34 @@ async function generateTextForMode(mode, buffer, extraParam = null) {
       }
     });
   });
+}
+
+// Show output window at cursor (without text - for streaming)
+async function showOutputWindowAtCursor() {
+  if (outputWindow) {
+    const { screen } = require('electron');
+    const cursor = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(cursor);
+    const workArea = display.workArea;
+    const [popupWidth, popupHeight] = outputWindow.getSize();
+
+    let x = cursor.x;
+    let y = cursor.y + 20;
+
+    if (y + popupHeight > workArea.y + workArea.height) {
+      y = cursor.y - popupHeight - 5;
+    }
+    if (x + popupWidth > workArea.x + workArea.width) {
+      x = workArea.x + workArea.width - popupWidth - 10;
+    }
+
+    x = Math.max(workArea.x, x);
+    y = Math.max(workArea.y, y);
+
+    outputWindow.setPosition(Math.round(x), Math.round(y));
+    outputWindow.showInactive();
+    await new Promise(resolve => setTimeout(resolve, 30));
+  }
 }
 
 async function showSuggestionAtCursor(text) {
@@ -725,15 +947,20 @@ async function handleClipboardTrigger() {
   pendingBackspaceCount = typedInstruction ? bufferData.raw_count : 0;
   triggerMode = 'clipboard';
 
-  // Generate AI response based on clipboard + optional instruction
+  // Generate AI response based on clipboard + optional instruction (streaming)
   try {
+    // Show output window BEFORE streaming starts (for non-auto-inject)
+    if (!autoInjectEnabled) {
+      await showOutputWindowAtCursor();
+    }
+
     let result;
     if (typedInstruction) {
       // Combined mode: clipboard as context, typed text as instruction
-      result = await generateTextForMode('clipboard_with_instruction', clipboardText, typedInstruction);
+      result = await generateTextStreaming('clipboard_with_instruction', clipboardText, typedInstruction, autoInjectEnabled);
     } else {
       // Original mode: clipboard only
-      result = await generateTextForMode('clipboard', clipboardText);
+      result = await generateTextStreaming('clipboard', clipboardText, null, autoInjectEnabled);
     }
 
     if (result && result.text) {
@@ -750,13 +977,15 @@ async function handleClipboardTrigger() {
         triggerMode = null;
         // Reset monitor again after injection to be safe
         sendToMonitor({ cmd: 'reset' });
-      } else {
-        // Suggestion mode: show popup for approval
-        await showSuggestionAtCursor(result.text);
       }
+      // Note: For suggestion mode, text is already displayed via streaming
     }
   } catch (error) {
     console.error('Clipboard AI generation error:', error);
+    // Hide output window on error
+    if (outputWindow && !autoInjectEnabled) {
+      outputWindow.hide();
+    }
   }
 }
 
@@ -771,6 +1000,9 @@ app.whenReady().then(() => {
 
   // Start keystroke monitor for background text capture
   startKeystrokeMonitor();
+
+  // Start AI backend service (persistent process for low latency)
+  startAIBackend();
 
   const toggleShortcut = globalShortcut.register('CommandOrControl+Shift+Space', () => {
     if (mainWindow) {
@@ -960,6 +1192,8 @@ app.on('will-quit', () => {
   }
   // Stop keystroke monitor
   stopKeystrokeMonitor();
+  // Stop AI backend service
+  stopAIBackend();
 });
 
 // Voice recording functions for hold-to-talk
@@ -1076,54 +1310,19 @@ app.on('window-all-closed', () => {
   }
 });
 
-// IPC handler for generating text
+// IPC handler for generating text (uses persistent backend with streaming)
 ipcMain.handle('generate-text', async (event, prompt, context) => {
-  return new Promise((resolve, reject) => {
-    const pythonScript = path.join(__dirname, 'text_ai_backend.py');
+  try {
+    // Use the streaming backend
+    const mode = context?.mode || 'prompt';
+    const extraParam = mode === 'extension' ? context?.last_output :
+                       mode === 'clipboard_with_instruction' ? context?.instruction : null;
 
-    // Pass prompt and context as JSON strings for proper parsing
-    const promptJson = JSON.stringify(prompt);
-    const args = [pythonScript, promptJson];
-
-    if (context && Object.keys(context).length > 0) {
-      const contextJson = JSON.stringify(context);
-      args.push(contextJson);
-    }
-
-    // Use cached env (loaded once at startup)
-    const env = cachedEnv || process.env;
-
-    // Use spawn without shell to avoid escaping issues
-    const pythonProcess = spawn('python', args, {
-      cwd: __dirname,
-      shell: false,
-      env: env
-    });
-
-    let output = '';
-    let errorOutput = '';
-
-    pythonProcess.stdout.on('data', (data) => {
-      output += data.toString();
-    });
-
-    pythonProcess.stderr.on('data', (data) => {
-      errorOutput += data.toString();
-    });
-
-    pythonProcess.on('close', (code) => {
-      if (code === 0) {
-        try {
-          const result = JSON.parse(output);
-          resolve(result);
-        } catch (e) {
-          reject(new Error('Failed to parse Python output: ' + output));
-        }
-      } else {
-        reject(new Error('Python script error: ' + errorOutput));
-      }
-    });
-  });
+    const result = await generateTextStreaming(mode, prompt, extraParam, true); // autoInject=true to skip streaming UI
+    return result;
+  } catch (error) {
+    return { error: error.message };
+  }
 });
 
 // IPC handler for showing inline suggestion at cursor

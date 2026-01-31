@@ -15,7 +15,8 @@
       "Bash(del \"C:\\\\Users\\\\rajma\\\\Desktop\\\\zenth\\\\ai-text-bot\\\\keylog.json\")",
       "WebSearch",
       "WebFetch(domain:replicate.com)",
-      "Bash(node --check:*)"
+      "Bash(node --check:*)",
+      "Bash(findstr:*)"
     ]
   }
 }

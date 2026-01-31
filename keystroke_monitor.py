@@ -74,7 +74,7 @@ MAX_ENTRY_LENGTH = 2000
 WINDOW_CHECK_INTERVAL = 100
 
 # Live mode pause threshold for auto-suggestion (seconds)
-LIVE_MODE_PAUSE_THRESHOLD = 1.5
+LIVE_MODE_PAUSE_THRESHOLD = 1.0
 
 # Minimum characters before live suggestion triggers
 LIVE_MODE_MIN_CHARS = 3

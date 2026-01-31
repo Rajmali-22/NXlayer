@@ -208,9 +208,9 @@ function createSettingsWindow() {
   const display = screen.getDisplayNearestPoint(cursor);
   const workArea = display.workArea;
 
-  // macOS-style settings panel
-  const windowWidth = 420;
-  const windowHeight = 520;  // Increased for Live Mode toggle
+  // Clean settings panel - no nav bar
+  const windowWidth = 380;
+  const windowHeight = 580;
 
   // Position near center-top of screen
   const x = Math.round(workArea.x + (workArea.width - windowWidth) / 2);

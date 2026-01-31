@@ -44,6 +44,9 @@ function fixInvertedCaps(str) {
 let voiceProcess = null;
 let isVoiceRecording = false;
 
+// Auto-inject mode (autonomous - no suggestion popup)
+let autoInjectEnabled = false;
+
 function createWindow() {
   const { screen } = require('electron');
   const primaryDisplay = screen.getPrimaryDisplay();
@@ -238,8 +241,21 @@ async function handleKeystrokeEvent(event) {
           context: buffer
         });
 
-        // Show suggestion popup
-        await showSuggestionAtCursor(result.text);
+        if (autoInjectEnabled) {
+          // Auto mode: inject directly without showing suggestion
+          // Reset monitor BEFORE injection so it doesn't capture injected text
+          sendToMonitor({ cmd: 'reset' });
+          await autoInjectWithBackspace(result.text, pendingBackspaceCount, humanizeTyping);
+          // Clear state after injection
+          lastGeneratedText = '';
+          pendingBackspaceCount = 0;
+          triggerMode = null;
+          // Reset monitor again after injection to be safe
+          sendToMonitor({ cmd: 'reset' });
+        } else {
+          // Suggestion mode: show popup for approval
+          await showSuggestionAtCursor(result.text);
+        }
       }
     } catch (error) {
       console.error('AI generation error:', error);
@@ -266,6 +282,60 @@ async function handleKeystrokeEvent(event) {
   } else if (event.event === 'error') {
     console.error('Keystroke monitor error:', event.message);
   }
+}
+
+// Auto-inject text directly without showing suggestion popup
+async function autoInjectWithBackspace(text, backspaceCount, humanize = false) {
+  return new Promise((resolve) => {
+    const pythonInjectPath = path.join(__dirname, 'keyboard_inject.py');
+
+    // Escape text for Python (will be unescaped by keyboard_inject.py)
+    let escapedText = text
+      .replace(/\\/g, '\\\\')
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r')
+      .replace(/\t/g, '\\t');
+
+    // Build args array for spawn (handles quoting properly)
+    const args = [pythonInjectPath, escapedText];
+    if (backspaceCount > 0) {
+      args.push('--backspace', backspaceCount.toString());
+    }
+    if (humanize) {
+      args.push('--humanize');
+    }
+
+    const pythonProcess = spawn('python', args, {
+      cwd: __dirname,
+      shell: false
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code !== 0) {
+        // Fallback: clipboard + Ctrl+V
+        try {
+          clipboard.writeText(text);
+          if (robot) {
+            setTimeout(() => {
+              robot.keyTap('v', 'control');
+              resolve({ success: true, method: 'clipboard-fallback' });
+            }, 50);
+          } else {
+            resolve({ success: true, method: 'clipboard-only' });
+          }
+        } catch (clipError) {
+          resolve({ success: false, error: clipError.message });
+        }
+      } else {
+        resolve({ success: true, method: 'python-inject' });
+      }
+    });
+
+    pythonProcess.on('error', (err) => {
+      clipboard.writeText(text);
+      resolve({ success: true, method: 'clipboard-fallback' });
+    });
+  });
 }
 
 async function generateTextForMode(mode, buffer, extraParam = null) {
@@ -549,7 +619,22 @@ async function handleClipboardTrigger() {
 
     if (result && result.text) {
       lastGeneratedText = result.text;
-      await showSuggestionAtCursor(result.text);
+
+      if (autoInjectEnabled) {
+        // Auto mode: inject directly without showing suggestion
+        // Reset monitor BEFORE injection so it doesn't capture injected text
+        sendToMonitor({ cmd: 'reset' });
+        await autoInjectWithBackspace(result.text, pendingBackspaceCount, humanizeTyping);
+        // Clear state after injection
+        lastGeneratedText = '';
+        pendingBackspaceCount = 0;
+        triggerMode = null;
+        // Reset monitor again after injection to be safe
+        sendToMonitor({ cmd: 'reset' });
+      } else {
+        // Suggestion mode: show popup for approval
+        await showSuggestionAtCursor(result.text);
+      }
     }
   } catch (error) {
     console.error('Clipboard AI generation error:', error);
@@ -1023,6 +1108,88 @@ let lastGeneratedText = '';
 ipcMain.on('set-generated-text', (event, text, humanize = false) => {
   lastGeneratedText = text;
   humanizeTyping = humanize;
+});
+
+// IPC handler to set auto-inject mode
+ipcMain.handle('set-auto-inject', async (event, enabled) => {
+  autoInjectEnabled = enabled;
+  return { success: true, autoInject: autoInjectEnabled };
+});
+
+// IPC handler for auto-inject (autonomous mode - no suggestion popup)
+ipcMain.handle('auto-inject-text', async (event, text, humanize = false) => {
+  try {
+    // Hide windows silently
+    if (mainWindow) {
+      mainWindow.hide();
+      isWindowVisible = false;
+    }
+    if (outputWindow) {
+      outputWindow.hide();
+    }
+
+    // Reset monitor BEFORE injection so it doesn't capture injected text
+    sendToMonitor({ cmd: 'reset' });
+
+    // Small delay to ensure focus is on target app
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    // Inject using Python
+    const pythonInjectPath = path.join(__dirname, 'keyboard_inject.py');
+
+    return new Promise((resolve) => {
+      // Escape text for Python (will be unescaped by keyboard_inject.py)
+      let escapedText = text
+        .replace(/\\/g, '\\\\')
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r')
+        .replace(/\t/g, '\\t');
+
+      // Build args array for spawn (handles quoting properly)
+      const args = [pythonInjectPath, escapedText];
+      if (humanize) {
+        args.push('--humanize');
+      }
+
+      const pythonProcess = spawn('python', args, {
+        cwd: __dirname,
+        shell: false
+      });
+
+      pythonProcess.on('close', (code) => {
+        // Clear state and reset monitor after injection
+        lastGeneratedText = '';
+        pendingBackspaceCount = 0;
+        triggerMode = null;
+        sendToMonitor({ cmd: 'reset' });
+
+        if (code !== 0) {
+          // Fallback to clipboard
+          clipboard.writeText(text);
+          if (robot) {
+            setTimeout(() => {
+              robot.keyTap('v', 'control');
+              resolve({ success: true, method: 'clipboard-fallback' });
+            }, 50);
+          } else {
+            resolve({ success: true, method: 'clipboard-only' });
+          }
+        } else {
+          resolve({ success: true, method: 'python-inject' });
+        }
+      });
+
+      pythonProcess.on('error', (err) => {
+        // Clear state even on error
+        lastGeneratedText = '';
+        sendToMonitor({ cmd: 'reset' });
+        clipboard.writeText(text);
+        resolve({ success: true, method: 'clipboard-fallback' });
+      });
+    });
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
 });
 
 // IPC handler for inline text injection using Python injector

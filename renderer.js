@@ -5,6 +5,7 @@ let generateBtn = null;
 let statusDiv = null;
 let micBtn = null;
 let humanizeToggle = null;
+let autoInjectToggle = null;
 
 // Voice recording state
 let isRecording = false;
@@ -15,6 +16,14 @@ document.addEventListener('DOMContentLoaded', () => {
     statusDiv = document.getElementById('status');
     micBtn = document.getElementById('mic-btn');
     humanizeToggle = document.getElementById('humanize-toggle');
+    autoInjectToggle = document.getElementById('auto-inject-toggle');
+
+    // Sync auto-inject setting with main process
+    if (autoInjectToggle) {
+        autoInjectToggle.addEventListener('change', () => {
+            ipcRenderer.invoke('set-auto-inject', autoInjectToggle.checked);
+        });
+    }
 
     // Generate button click
     generateBtn.addEventListener('click', handleGenerate);
@@ -93,6 +102,7 @@ async function handleGenerate() {
     const toneSelect = document.getElementById('tone-select');
     const tone = toneSelect ? toneSelect.value : 'professional';
     const humanize = humanizeToggle ? humanizeToggle.checked : false;
+    const autoInject = autoInjectToggle ? autoInjectToggle.checked : false;
 
     if (!prompt) {
         showStatus('Please enter a prompt', 'error');
@@ -109,11 +119,19 @@ async function handleGenerate() {
         if (result.error) {
             showStatus('Error: ' + result.error, 'error');
         } else if (result.text) {
-            // Send to main process for global shortcut (include humanize setting)
-            ipcRenderer.send('set-generated-text', result.text, humanize);
-            // Show inline suggestion near cursor
-            ipcRenderer.invoke('show-inline-suggestion', result.text);
-            showStatus('Ctrl+Shift+P to paste | Esc to cancel', 'success');
+            if (autoInject) {
+                // Auto mode: inject directly without showing suggestion
+                // Clear UI first, then inject
+                promptInput.value = '';
+                statusDiv.classList.add('hidden');
+                // Wait for injection to complete
+                await ipcRenderer.invoke('auto-inject-text', result.text, humanize);
+            } else {
+                // Suggestion mode: show popup for approval
+                ipcRenderer.send('set-generated-text', result.text, humanize);
+                ipcRenderer.invoke('show-inline-suggestion', result.text);
+                showStatus('Ctrl+Shift+P to paste | Esc to cancel', 'success');
+            }
         } else {
             showStatus('Unexpected response format', 'error');
         }

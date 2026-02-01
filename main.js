@@ -113,6 +113,9 @@ let liveModeEnabled = false;
 let codingModeEnabled = false;
 let explanationWindow = null;
 
+// Ultra Human typing mode (chain-of-thought code injection for interviews)
+let ultraHumanEnabled = false;
+
 // Load and cache environment/config once at startup
 function loadCachedConfig() {
   const fs = require('fs');
@@ -1243,7 +1246,80 @@ app.whenReady().then(() => {
       // Hide explanation window (coding mode)
       hideExplanationWindow();
 
-      // Use Python-based keyboard injection (pynput)
+      // Check if Ultra Human typing is enabled (for coding interviews)
+      if (ultraHumanEnabled) {
+        // Use pyautogui_typer_V3 directly - pass problem, let it generate and type code
+        const typerScript = path.join(__dirname, 'pyautogui_typer_V3 (1).py');
+
+        try {
+          // Small delay to ensure focus is on target app
+          await new Promise(resolve => setTimeout(resolve, 150));
+
+          // Get clipboard text as the problem (the coding question)
+          const problemText = clipboard.readText() || '';
+
+          if (!problemText.trim()) {
+            console.log('Ultra Human: No problem in clipboard');
+            return;
+          }
+
+          console.log('Ultra Human typing - problem:', problemText.substring(0, 50) + '...');
+
+          // Set UTF-8 encoding for emoji support
+          const env = { ...(cachedEnv || process.env), PYTHONIOENCODING: 'utf-8' };
+
+          // Call pyautogui_typer_V3 directly with the problem
+          const ultraProcess = spawn(getPythonCommand(), [typerScript, problemText], {
+            cwd: __dirname,
+            shell: false,
+            env: env
+          });
+
+          ultraProcess.stdout.on('data', (data) => {
+            console.log('Ultra Human stdout:', data.toString());
+          });
+
+          ultraProcess.stderr.on('data', (data) => {
+            console.log('Ultra Human stderr:', data.toString());
+          });
+
+          ultraProcess.on('close', (code) => {
+            console.log('Ultra Human typing completed with code:', code);
+
+            // Reset state
+            lastGeneratedText = '';
+            lastGeneratedExplanation = '';
+            pendingBackspaceCount = 0;
+            triggerMode = null;
+            sendToMonitor({ cmd: 'reset' });
+
+            if (mainWindow) {
+              mainWindow.webContents.send('clear-prompt');
+            }
+          });
+
+          ultraProcess.on('error', (err) => {
+            console.error('Ultra Human typing error:', err);
+            // Fallback to normal injection
+            clipboard.writeText(lastGeneratedText);
+            if (robot) {
+              robot.keyTap('v', 'control');
+            }
+            lastGeneratedText = '';
+            lastGeneratedExplanation = '';
+          });
+
+        } catch (error) {
+          console.error('Ultra Human error:', error);
+          lastGeneratedText = '';
+          lastGeneratedExplanation = '';
+          pendingBackspaceCount = 0;
+          triggerMode = null;
+        }
+        return; // Exit early - ultra human handles everything
+      }
+
+      // Use Python-based keyboard injection (pynput) - normal mode
       const pythonInjectPath = path.join(__dirname, 'keyboard_inject.py');
 
       try {
@@ -1617,6 +1693,7 @@ ipcMain.on('settings-init-sync', (event, s) => {
       sendToMonitor({ cmd: 'set_live_mode', enabled: liveModeEnabled });
     }
     if (s.codingModeEnabled !== undefined) codingModeEnabled = s.codingModeEnabled;
+    if (s.ultraHumanEnabled !== undefined) ultraHumanEnabled = s.ultraHumanEnabled;
   }
 });
 
@@ -1647,7 +1724,8 @@ ipcMain.handle('get-settings-state', async () => {
     autoInjectEnabled,
     humanizeEnabled: humanizeTyping,
     liveModeEnabled,
-    codingModeEnabled
+    codingModeEnabled,
+    ultraHumanEnabled
   };
 });
 
@@ -1663,6 +1741,12 @@ ipcMain.on('settings-live-mode-toggle', (event, enabled) => {
 ipcMain.on('settings-coding-mode-toggle', (event, enabled) => {
   codingModeEnabled = enabled;
   console.log('Coding mode enabled:', codingModeEnabled);
+});
+
+// IPC handler for ultra human typing toggle
+ipcMain.on('settings-ultra-human-toggle', (event, enabled) => {
+  ultraHumanEnabled = enabled;
+  console.log('Ultra Human typing enabled:', ultraHumanEnabled);
 });
 
 // IPC handler for auto-inject (autonomous mode - no suggestion popup)

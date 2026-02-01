@@ -7,6 +7,7 @@ let settings = {
     autoInjectEnabled: false,
     liveModeEnabled: false,
     codingModeEnabled: false,
+    ultraHumanEnabled: false,
     darkMode: true
 };
 
@@ -17,6 +18,7 @@ let humanizeToggle;
 let autoInjectToggle;
 let liveModeToggle;
 let codingModeToggle;
+let ultraHumanToggle;
 let closeBtn;
 
 // Initialize
@@ -27,6 +29,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     autoInjectToggle = document.getElementById('auto-inject-toggle');
     liveModeToggle = document.getElementById('live-mode-toggle');
     codingModeToggle = document.getElementById('coding-mode-toggle');
+    ultraHumanToggle = document.getElementById('ultra-human-toggle');
     closeBtn = document.getElementById('close-btn');
 
     await loadSettings();
@@ -78,6 +81,13 @@ function setupEventListeners() {
         ipcRenderer.send('settings-coding-mode-toggle', settings.codingModeEnabled);
     });
 
+    // Ultra Human typing toggle
+    ultraHumanToggle.addEventListener('change', () => {
+        settings.ultraHumanEnabled = ultraHumanToggle.checked;
+        saveSettings();
+        ipcRenderer.send('settings-ultra-human-toggle', settings.ultraHumanEnabled);
+    });
+
     // Close button
     closeBtn.addEventListener('click', () => {
         ipcRenderer.send('close-settings-window');
@@ -111,6 +121,7 @@ async function loadSettings() {
             settings.humanizeEnabled = mainState.humanizeEnabled;
             settings.liveModeEnabled = mainState.liveModeEnabled;
             settings.codingModeEnabled = mainState.codingModeEnabled;
+            settings.ultraHumanEnabled = mainState.ultraHumanEnabled;
         }
     } catch (e) {
         console.error('Failed to sync settings with main process:', e);
@@ -132,6 +143,7 @@ function updateUI() {
     autoInjectToggle.checked = settings.autoInjectEnabled;
     liveModeToggle.checked = settings.liveModeEnabled;
     codingModeToggle.checked = settings.codingModeEnabled;
+    ultraHumanToggle.checked = settings.ultraHumanEnabled;
     applyTheme();
     updateDisabledState();
 }
@@ -143,6 +155,7 @@ function updateDisabledState() {
     autoInjectToggle.disabled = !isEnabled;
     liveModeToggle.disabled = !isEnabled;
     codingModeToggle.disabled = !isEnabled;
+    ultraHumanToggle.disabled = !isEnabled;
 
     // Visual feedback
     const behaviorItems = document.querySelectorAll('.setting-item');
@@ -180,6 +193,9 @@ ipcRenderer.on('sync-settings', (event, newSettings) => {
     }
     if (newSettings.codingModeEnabled !== undefined) {
         settings.codingModeEnabled = newSettings.codingModeEnabled;
+    }
+    if (newSettings.ultraHumanEnabled !== undefined) {
+        settings.ultraHumanEnabled = newSettings.ultraHumanEnabled;
     }
     if (newSettings.darkMode !== undefined) {
         settings.darkMode = newSettings.darkMode;

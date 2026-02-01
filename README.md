@@ -1,6 +1,15 @@
 # AI Text Bot
 
-AI-powered text assistant for live typing, interviews, and productivity. Uses Mistral AI with smart context detection.
+AI-powered text assistant for real-time typing, coding interviews, and productivity. Features smart context detection, human-like typing simulation, and invisible screen-share mode.
+
+## Features
+
+- **Smart AI Responses** - Auto-detects code problems, definitions, questions, and instructions
+- **Human-like Typing** - Natural typing speed with realistic variations
+- **Ultra Human Mode** - Chain-of-thought code injection for coding interviews
+- **Screen Share Invisible** - Windows excluded from screen capture (Zoom, Meet, Teams)
+- **Voice Input** - Hold-to-talk speech recognition
+- **Vision Analysis** - Screenshot + AI analysis
 
 ## Quick Start
 
@@ -9,10 +18,9 @@ AI-powered text assistant for live typing, interviews, and productivity. Uses Mi
 npm install
 pip install -r requirements.txt
 
-# Add API keys to .env file
-MISTRAL_API_KEY=your-key
-ANTHROPIC_API_KEY=your-key    # for screenshot vision
-OPENAI_API_KEY=your-key       # for voice (optional)
+# Configure API keys
+cp config.example.env .env
+# Edit .env with your keys
 
 # Run
 npm start
@@ -22,72 +30,118 @@ npm start
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+Alt+Enter` | Fix grammar / continue writing / instruction mode |
-| `Ctrl+Shift+D` | Process clipboard (auto-detects code/question/text) |
-| `Ctrl+Shift+P` | Paste/inject AI response |
-| `Ctrl+Shift+F` | Screenshot + Vision (analyzes screen) |
-| `Ctrl+Shift+V` | Voice record / stop |
+| `Ctrl+Shift+D` | Process clipboard (code/question/text) |
+| `Ctrl+Shift+P` | Inject AI response |
+| `Ctrl+Alt+Enter` | Fix grammar / continue writing |
+| `Ctrl+Shift+F` | Screenshot + Vision analysis |
+| `Ctrl+Shift+V` | Voice input (hold to talk) |
+| `Ctrl+Shift+S` | Open settings |
 | `Ctrl+Shift+Space` | Toggle overlay window |
-| `Ctrl+.` | Pause/resume text injection |
 | `Escape` | Cancel / close popup |
 
-## Smart Clipboard (Ctrl+Shift+D)
+## Settings
 
-Auto-detects what you copied and responds appropriately:
+Access with `Ctrl+Shift+S`:
 
-| You Copy | AI Response |
-|----------|-------------|
-| "two sum problem" | Pure code solution |
-| "OOP" | 25-35 word definition |
-| "What is REST?" | Direct 2-4 sentence answer |
-| Code + "explain this" | Follows your instruction |
-
-Output is clean plain text - no markdown, no preambles. Ready for interviews.
+| Setting | Description |
+|---------|-------------|
+| **AI Assistant** | Master on/off toggle |
+| **Dark Mode** | UI theme |
+| **Human-like Typing** | Natural speed variation |
+| **Auto Inject** | Skip suggestion popup |
+| **Live Mode** | Auto-suggest on typing pause |
+| **Coding Mode** | Show code + explanation windows |
+| **Ultra Human Typing** | Chain-of-thought code injection |
 
 ## Modes
 
-- **Backtick mode**: Grammar/spelling fix (Ctrl+Alt+Enter on typed text)
-- **Extension mode**: Continue writing (Ctrl+Alt+Enter again within 2s)
-- **Clipboard mode**: Smart processing (Ctrl+Shift+D)
-- **Vision mode**: Screenshot analysis (Ctrl+Shift+F)
-- **Voice mode**: Speech to text (Ctrl+Shift+V)
+### Smart Clipboard (Ctrl+Shift+D)
+
+Auto-detects content type and responds appropriately:
+
+| You Copy | AI Response |
+|----------|-------------|
+| `"two sum problem"` | Clean code solution |
+| `"OOP"` | 25-35 word definition |
+| `"What is REST?"` | Direct 2-4 sentence answer |
+| Code + `"explain this"` | Follows your instruction |
+
+### Ultra Human Typing (Interview Mode)
+
+For coding interviews - types code like a real developer:
+
+1. Enable **Ultra Human Typing** in Settings
+2. Copy the coding problem
+3. Click in your code editor
+4. Press `Ctrl+Shift+P`
+5. AI generates and types code with:
+   - Main skeleton first with `pass`
+   - Navigates up to add helper functions
+   - Returns to implement main
+   - Realistic typos and corrections
+   - Variable pauses between sections
+
+### Other Modes
+
+- **Grammar Mode** - Fix spelling/grammar (`Ctrl+Alt+Enter` on typed text)
+- **Extension Mode** - Continue writing (`Ctrl+Alt+Enter` again within 2s)
+- **Vision Mode** - Analyze screenshots (`Ctrl+Shift+F`)
+- **Voice Mode** - Speech to text (`Ctrl+Shift+V` hold to talk)
 
 ## Project Structure
 
 ```
 ai-text-bot/
-├── main.js               # Electron main process
-├── text_ai_backend.py    # Mistral AI backend
-├── smart_prompts.py      # Context-aware prompting
-├── keyboard_inject.py    # Text injection
-├── keystroke_monitor/    # Keyboard monitoring
-├── screenshot_vision.py  # Vision AI (Claude)
-├── voice_transcribe.py   # Speech to text
-├── index.html            # Main UI
-├── settings.html         # Settings UI
-├── renderer.js           # Frontend logic
-├── styles.css            # Styling
-├── .env                  # API keys
-└── requirements.txt      # Python dependencies
+├── main.js                      # Electron main process
+├── ai_backend_service.py        # Persistent AI backend
+├── smart_prompts.py             # Context-aware prompting
+├── keyboard_inject.py           # Text injection (pynput)
+├── keystroke_monitor.py         # Keyboard monitoring
+├── pyautogui_typer_V3 (1).py    # Human-like code typing
+├── pyautogui_typer_V3_Sign (1).py  # LeetCode-style typing
+├── screenshot_vision.py         # Vision AI (Claude)
+├── voice_transcribe.py          # Speech recognition
+├── index.html                   # Main overlay UI
+├── output.html                  # Suggestion popup
+├── explanation.html             # Code explanation window
+├── settings.html                # Settings UI
+├── settings_renderer.js         # Settings logic
+├── renderer.js                  # Frontend logic
+└── requirements.txt             # Python dependencies
 ```
-
-## Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| npm/python not found | Reinstall and add to PATH, restart PC |
-| Module not found | Run `pip install -r requirements.txt` |
-| Shortcuts not working | Run as Administrator |
-| API errors | Check API keys in .env |
 
 ## Requirements
 
 - Node.js 16+
 - Python 3.8+
-- Windows (primary), macOS/Linux (partial support)
+- Windows 10/11 (primary support)
+- macOS/Linux (partial support)
 
 ## API Keys
 
+Create `.env` file with:
+
+```env
+MISTRAL_API_KEY=your-key-here
+```
+
+Get keys from:
 - **Mistral**: https://console.mistral.ai/api-keys/
-- **Anthropic**: https://console.anthropic.com/settings/keys
-- **OpenAI**: https://platform.openai.com/api-keys (optional)
+
+Optional:
+- **Anthropic** (vision): https://console.anthropic.com/settings/keys
+- **OpenAI** (voice): https://platform.openai.com/api-keys
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| Shortcuts not working | Run as Administrator |
+| Module not found | `pip install -r requirements.txt` |
+| Unicode errors | Set `PYTHONIOENCODING=utf-8` |
+| API errors | Check keys in `.env` |
+| Window visible in screen share | Restart app after enabling |
+
+## License
+
+MIT License

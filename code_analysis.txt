@@ -1,0 +1,64 @@
+================================================================================
+CODE STRUCTURE ANALYSIS
+================================================================================
+
+ORIGINAL CODE:
+--------------------------------------------------------------------------------
+import math
+def square_parameters(side):
+    perimeter = 4 * side
+    area = side ** 2
+    return perimeter, area
+def circle_parameters(radius):
+    circumference = 2 * math.pi * radius
+    area = math.pi * radius ** 2
+    return circumference, area
+side = float(input("Enter side of square: "))
+perimeter, area = square_parameters(side)
+print(f"Square Perimeter: {perimeter}, Area: {area}")
+radius = float(input("Enter radius of circle: "))
+circumference, area = circle_parameters(radius)
+print(f"Circle Circumference: {circumference}, Area: {area}")
+--------------------------------------------------------------------------------
+
+LINE-BY-LINE BREAKDOWN:
+--------------------------------------------------------------------------------
+Line   1 | Spaces:  0 | Indent: 0 | Type: IMPORT          | 'import math'
+Line   2 | Spaces:  0 | Indent: 0 | Type: FUNCTION_DEF    | 'def square_parameters(side):'
+Line   3 | Spaces:  4 | Indent: 1 | Type: CODE            | '    perimeter = 4 * side'
+Line   4 | Spaces:  4 | Indent: 1 | Type: CODE            | '    area = side ** 2'
+Line   5 | Spaces:  4 | Indent: 1 | Type: RETURN          | '    return perimeter, area'
+Line   6 | Spaces:  0 | Indent: 0 | Type: FUNCTION_DEF    | 'def circle_parameters(radius):'
+Line   7 | Spaces:  4 | Indent: 1 | Type: CODE            | '    circumference = 2 * math.pi * radius'
+Line   8 | Spaces:  4 | Indent: 1 | Type: CODE            | '    area = math.pi * radius ** 2'
+Line   9 | Spaces:  4 | Indent: 1 | Type: RETURN          | '    return circumference, area'
+Line  10 | Spaces:  0 | Indent: 0 | Type: CODE            | 'side = float(input("Enter side of square: "))'
+Line  11 | Spaces:  0 | Indent: 0 | Type: CODE            | 'perimeter, area = square_parameters(side)'
+Line  12 | Spaces:  0 | Indent: 0 | Type: CODE            | 'print(f"Square Perimeter: {perimeter}, Area: {area}")'
+Line  13 | Spaces:  0 | Indent: 0 | Type: CODE            | 'radius = float(input("Enter radius of circle: "))'
+Line  14 | Spaces:  0 | Indent: 0 | Type: CODE            | 'circumference, area = circle_parameters(radius)'
+Line  15 | Spaces:  0 | Indent: 0 | Type: CODE            | 'print(f"Circle Circumference: {circumference}, Area: {area}")'
+
+================================================================================
+STATISTICS:
+--------------------------------------------------------------------------------
+Total lines: 15
+Non-empty lines: 15
+Blank lines: 0
+Import lines: 1
+Function definitions: 2
+Max indentation: 4 spaces
+
+--------------------------------------------------------------------------------
+SEMANTIC POSITIONS (for navigation):
+--------------------------------------------------------------------------------
+Imports: lines 1-1
+  -> 'below_imports' navigates to line 2
+
+Functions found:
+  square_parameters: line 2
+    -> 'above_function_square_parameters' navigates to line 1
+    -> 'below_function_square_parameters' navigates to line 3
+  circle_parameters: line 6
+    -> 'above_function_circle_parameters' navigates to line 5
+    -> 'below_function_circle_parameters' navigates to line 7

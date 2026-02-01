@@ -1,0 +1,65 @@
+{
+  "steps": [
+    {
+      "num": 1,
+      "thought": "Start with imports",
+      "lines": [
+        "import math",
+        ""
+      ],
+      "nav": "ctrl_home_home",
+      "pause": "short"
+    },
+    {
+      "num": 2,
+      "thought": "Write main function skeleton",
+      "lines": [
+        "def main():",
+        "    pass"
+      ],
+      "nav": "down_10_home",
+      "pause": "medium"
+    },
+    {
+      "num": 3,
+      "thought": "Need helper functions - add them after imports",
+      "lines": [
+        "def square_parameters(side):",
+        "    perimeter = 4 * side",
+        "    area = side ** 2",
+        "    return perimeter, area",
+        "",
+        "def circle_parameters(radius):",
+        "    circumference = 2 * math.pi * radius",
+        "    area = math.pi * radius ** 2",
+        "    return circumference, area",
+        ""
+      ],
+      "nav": "below_imports",
+      "pause": "long"
+    },
+    {
+      "num": 4,
+      "thought": "Go inside main function to implement USAGE",
+      "lines": [
+        "    side = float(input(\"Enter side of square: \"))",
+        "    perimeter, area = square_parameters(side)",
+        "    print(f\"Square Perimeter: {perimeter}, Area: {area}\")",
+        "    radius = float(input(\"Enter radius of circle: \"))",
+        "    circumference, area = circle_parameters(radius)",
+        "    print(f\"Circle Circumference: {circumference}, Area: {area}\")"
+      ],
+      "nav": "inside_main",
+      "pause": "short"
+    },
+    {
+      "num": 5,
+      "thought": "Remove pass and finalize main function",
+      "lines": [
+        ""
+      ],
+      "nav": "ctrl_end_home_delete_line",
+      "pause": "short"
+    }
+  ]
+}

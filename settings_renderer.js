@@ -97,7 +97,7 @@ function setupEventListeners() {
 async function loadSettings() {
     // Load from localStorage
     try {
-        const saved = localStorage.getItem('ai-text-bot-settings');
+        const saved = localStorage.getItem('ghosttype-settings');
         if (saved) {
             const parsed = JSON.parse(saved);
             settings = { ...settings, ...parsed };
@@ -130,7 +130,7 @@ async function loadSettings() {
 
 function saveSettings() {
     try {
-        localStorage.setItem('ai-text-bot-settings', JSON.stringify(settings));
+        localStorage.setItem('ghosttype-settings', JSON.stringify(settings));
     } catch (e) {
         console.error('Failed to save settings:', e);
     }

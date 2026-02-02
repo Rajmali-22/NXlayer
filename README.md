@@ -1,6 +1,6 @@
-# AI Text Bot
+# GhostType
 
-AI-powered text assistant for real-time typing, coding interviews, and productivity. Features smart context detection, human-like typing simulation, and invisible screen-share mode.
+AI-powered stealth typing assistant for real-time typing, coding interviews, and productivity. Features smart context detection, human-like typing simulation, and invisible screen-share mode.
 
 ## Features
 
@@ -91,7 +91,7 @@ For coding interviews - types code like a real developer:
 ## Project Structure
 
 ```
-ai-text-bot/
+ghosttype/
 ├── main.js                      # Electron main process
 ├── ai_backend_service.py        # Persistent AI backend
 ├── smart_prompts.py             # Context-aware prompting

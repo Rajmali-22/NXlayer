@@ -1,4 +1,4 @@
-# AI Text Bot - Python Dependencies
+# GhostType - Python Dependencies
 # Pinned versions for reproducible builds
 
 # AI Provider

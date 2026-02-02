@@ -2,9 +2,10 @@
   "steps": [
     {
       "num": 1,
-      "thought": "Start with imports",
+      "thought": "Start with imports for Java code",
       "lines": [
-        "import math",
+        "import java.util.HashMap;",
+        "import java.util.Map;",
         ""
       ],
       "nav": "ctrl_home_home",
@@ -12,53 +13,49 @@
     },
     {
       "num": 2,
-      "thought": "Write main function skeleton",
+      "thought": "Write class skeleton",
       "lines": [
-        "def main():",
-        "    pass"
+        "public class TwoSum {",
+        "    public int[] twoSum(int[] nums, int target) {",
+        "        pass",
+        "    }",
+        "}"
       ],
       "nav": "down_10_home",
       "pause": "medium"
     },
     {
       "num": 3,
-      "thought": "Need helper functions - add them after imports",
+      "thought": "No helpers needed, just implement main logic",
       "lines": [
-        "def square_parameters(side):",
-        "    perimeter = 4 * side",
-        "    area = side ** 2",
-        "    return perimeter, area",
-        "",
-        "def circle_parameters(radius):",
-        "    circumference = 2 * math.pi * radius",
-        "    area = math.pi * radius ** 2",
-        "    return circumference, area",
-        ""
+        "        Map<Integer, Integer> seen = new HashMap<>();",
+        "        for (int i = 0; i < nums.length; i++) {",
+        "            int complement = target - nums[i];",
+        "            if (seen.containsKey(complement)) {",
+        "                return new int[]{seen.get(complement), i};",
+        "            }",
+        "            seen.put(nums[i], i);",
+        "        }",
+        "        return new int[0];"
       ],
-      "nav": "below_imports",
+      "nav": "inside_class",
       "pause": "long"
     },
     {
       "num": 4,
-      "thought": "Go inside main function to implement USAGE",
+      "thought": "Add Python code as a comment",
       "lines": [
-        "    side = float(input(\"Enter side of square: \"))",
-        "    perimeter, area = square_parameters(side)",
-        "    print(f\"Square Perimeter: {perimeter}, Area: {area}\")",
-        "    radius = float(input(\"Enter radius of circle: \"))",
-        "    circumference, area = circle_parameters(radius)",
-        "    print(f\"Circle Circumference: {circumference}, Area: {area}\")"
+        "    // Here's the clean Python code for the two-sum problem:",
+        "    // def two_sum(nums, target):",
+        "    //     seen = {}",
+        "    //     for i, num in enumerate(nums):",
+        "    //         complement = target - num",
+        "    //         if complement in seen:",
+        "    //             return [seen[complement], i]",
+        "    //         seen[num] = i",
+        "    //     return []"
       ],
-      "nav": "inside_main",
-      "pause": "short"
-    },
-    {
-      "num": 5,
-      "thought": "Remove pass and finalize main function",
-      "lines": [
-        ""
-      ],
-      "nav": "ctrl_end_home_delete_line",
+      "nav": "above_function_twoSum",
       "pause": "short"
     }
   ]

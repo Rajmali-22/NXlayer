@@ -2,7 +2,7 @@
 
 ## Data Collection
 
-AI Text Bot collects and processes data locally on your machine to provide its functionality.
+GhostType collects and processes data locally on your machine to provide its functionality.
 
 ### What is Collected
 

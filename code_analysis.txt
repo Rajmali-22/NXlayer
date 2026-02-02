@@ -4,61 +4,80 @@ CODE STRUCTURE ANALYSIS
 
 ORIGINAL CODE:
 --------------------------------------------------------------------------------
-import math
-def square_parameters(side):
-    perimeter = 4 * side
-    area = side ** 2
-    return perimeter, area
-def circle_parameters(radius):
-    circumference = 2 * math.pi * radius
-    area = math.pi * radius ** 2
-    return circumference, area
-side = float(input("Enter side of square: "))
-perimeter, area = square_parameters(side)
-print(f"Square Perimeter: {perimeter}, Area: {area}")
-radius = float(input("Enter radius of circle: "))
-circumference, area = circle_parameters(radius)
-print(f"Circle Circumference: {circumference}, Area: {area}")
+Here's the clean Python code for the two-sum problem:
+def two_sum(nums, target):
+    seen = {}
+    for i, num in enumerate(nums):
+        complement = target - num
+        if complement in seen:
+            return [seen[complement], i]
+        seen[num] = i
+    return []
+And here's the equivalent Java code with variables `a` and `b`:
+java
+import java.util.HashMap;
+import java.util.Map;
+public class TwoSum {
+    public int[] twoSum(int[] nums, int target) {
+        Map<Integer, Integer> seen = new HashMap<>();
+        for (int i = 0; i < nums.length; i++) {
+            int complement = target - nums[i];
+            if (seen.containsKey(complement)) {
+                return new int[]{seen.get(complement), i};
+            }
+            seen.put(nums[i], i);
+        }
+        return new int[0];
+    }
+}
 --------------------------------------------------------------------------------
 
 LINE-BY-LINE BREAKDOWN:
 --------------------------------------------------------------------------------
-Line   1 | Spaces:  0 | Indent: 0 | Type: IMPORT          | 'import math'
-Line   2 | Spaces:  0 | Indent: 0 | Type: FUNCTION_DEF    | 'def square_parameters(side):'
-Line   3 | Spaces:  4 | Indent: 1 | Type: CODE            | '    perimeter = 4 * side'
-Line   4 | Spaces:  4 | Indent: 1 | Type: CODE            | '    area = side ** 2'
-Line   5 | Spaces:  4 | Indent: 1 | Type: RETURN          | '    return perimeter, area'
-Line   6 | Spaces:  0 | Indent: 0 | Type: FUNCTION_DEF    | 'def circle_parameters(radius):'
-Line   7 | Spaces:  4 | Indent: 1 | Type: CODE            | '    circumference = 2 * math.pi * radius'
-Line   8 | Spaces:  4 | Indent: 1 | Type: CODE            | '    area = math.pi * radius ** 2'
-Line   9 | Spaces:  4 | Indent: 1 | Type: RETURN          | '    return circumference, area'
-Line  10 | Spaces:  0 | Indent: 0 | Type: CODE            | 'side = float(input("Enter side of square: "))'
-Line  11 | Spaces:  0 | Indent: 0 | Type: CODE            | 'perimeter, area = square_parameters(side)'
-Line  12 | Spaces:  0 | Indent: 0 | Type: CODE            | 'print(f"Square Perimeter: {perimeter}, Area: {area}")'
-Line  13 | Spaces:  0 | Indent: 0 | Type: CODE            | 'radius = float(input("Enter radius of circle: "))'
-Line  14 | Spaces:  0 | Indent: 0 | Type: CODE            | 'circumference, area = circle_parameters(radius)'
-Line  15 | Spaces:  0 | Indent: 0 | Type: CODE            | 'print(f"Circle Circumference: {circumference}, Area: {area}")'
+Line   1 | Spaces:  0 | Indent: 0 | Type: CODE            | "Here's the clean Python code for the two-sum problem:"
+Line   2 | Spaces:  0 | Indent: 0 | Type: FUNCTION_DEF    | 'def two_sum(nums, target):'
+Line   3 | Spaces:  4 | Indent: 1 | Type: CODE            | '    seen = {}'
+Line   4 | Spaces:  4 | Indent: 1 | Type: LOOP            | '    for i, num in enumerate(nums):'
+Line   5 | Spaces:  8 | Indent: 2 | Type: CODE            | '        complement = target - num'
+Line   6 | Spaces:  8 | Indent: 2 | Type: CONDITIONAL     | '        if complement in seen:'
+Line   7 | Spaces: 12 | Indent: 3 | Type: RETURN          | '            return [seen[complement], i]'
+Line   8 | Spaces:  8 | Indent: 2 | Type: CODE            | '        seen[num] = i'
+Line   9 | Spaces:  4 | Indent: 1 | Type: RETURN          | '    return []'
+Line  10 | Spaces:  0 | Indent: 0 | Type: CODE            | "And here's the equivalent Java code with variables `a` and `b`:"
+Line  11 | Spaces:  0 | Indent: 0 | Type: CODE            | 'java'
+Line  12 | Spaces:  0 | Indent: 0 | Type: IMPORT          | 'import java.util.HashMap;'
+Line  13 | Spaces:  0 | Indent: 0 | Type: IMPORT          | 'import java.util.Map;'
+Line  14 | Spaces:  0 | Indent: 0 | Type: CODE            | 'public class TwoSum {'
+Line  15 | Spaces:  4 | Indent: 1 | Type: CODE            | '    public int[] twoSum(int[] nums, int target) {'
+Line  16 | Spaces:  8 | Indent: 2 | Type: CODE            | '        Map<Integer, Integer> seen = new HashMap<>();'
+Line  17 | Spaces:  8 | Indent: 2 | Type: LOOP            | '        for (int i = 0; i < nums.length; i++) {'
+Line  18 | Spaces: 12 | Indent: 3 | Type: CODE            | '            int complement = target - nums[i];'
+Line  19 | Spaces: 12 | Indent: 3 | Type: CONDITIONAL     | '            if (seen.containsKey(complement)) {'
+Line  20 | Spaces: 16 | Indent: 4 | Type: RETURN          | '                return new int[]{seen.get(complement), i};'
+Line  21 | Spaces: 12 | Indent: 3 | Type: CODE            | '            }'
+Line  22 | Spaces: 12 | Indent: 3 | Type: CODE            | '            seen.put(nums[i], i);'
+Line  23 | Spaces:  8 | Indent: 2 | Type: CODE            | '        }'
+Line  24 | Spaces:  8 | Indent: 2 | Type: RETURN          | '        return new int[0];'
+Line  25 | Spaces:  4 | Indent: 1 | Type: CODE            | '    }'
+Line  26 | Spaces:  0 | Indent: 0 | Type: CODE            | '}'
 
 ================================================================================
 STATISTICS:
 --------------------------------------------------------------------------------
-Total lines: 15
-Non-empty lines: 15
+Total lines: 26
+Non-empty lines: 26
 Blank lines: 0
-Import lines: 1
-Function definitions: 2
-Max indentation: 4 spaces
+Import lines: 2
+Function definitions: 1
+Max indentation: 16 spaces
 
 --------------------------------------------------------------------------------
 SEMANTIC POSITIONS (for navigation):
 --------------------------------------------------------------------------------
-Imports: lines 1-1
-  -> 'below_imports' navigates to line 2
+Imports: lines 12-13
+  -> 'below_imports' navigates to line 14
 
 Functions found:
-  square_parameters: line 2
-    -> 'above_function_square_parameters' navigates to line 1
-    -> 'below_function_square_parameters' navigates to line 3
-  circle_parameters: line 6
-    -> 'above_function_circle_parameters' navigates to line 5
-    -> 'below_function_circle_parameters' navigates to line 7
+  two_sum: line 2
+    -> 'above_function_two_sum' navigates to line 1
+    -> 'below_function_two_sum' navigates to line 3

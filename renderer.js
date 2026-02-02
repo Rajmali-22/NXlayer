@@ -95,7 +95,7 @@ async function handleGenerate() {
     let humanize = false;
     let autoInject = false;
     try {
-        const saved = localStorage.getItem('ai-text-bot-settings');
+        const saved = localStorage.getItem('ghosttype-settings');
         if (saved) {
             const settings = JSON.parse(saved);
             humanize = settings.humanizeEnabled || false;

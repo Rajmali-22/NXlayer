@@ -1,7 +1,7 @@
 {
-  "name": "ai-text-bot",
+  "name": "ghosttype",
   "version": "1.0.0",
-  "description": "AI email completion bot with transparent overlay",
+  "description": "AI-powered stealth typing assistant with human-like simulation",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -12,8 +12,9 @@
   "keywords": [
     "electron",
     "ai",
-    "email",
-    "overlay"
+    "typing",
+    "assistant",
+    "interview"
   ],
   "author": "",
   "license": "MIT",

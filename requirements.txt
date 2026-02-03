@@ -5,6 +5,7 @@
 mistralai==1.10.1
 anthropic==0.77.0
 replicate==1.0.7
+google-genai>=1.0.0
 
 # Keyboard/Input
 pynput==1.8.1

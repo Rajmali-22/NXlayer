@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Screenshot + Vision API module.
-Captures full screen, sends with context to Claude Vision API.
+Captures full screen, sends with context to Gemini Vision API.
 """
 
 import sys
@@ -24,12 +24,12 @@ try:
 except ImportError:
     HAS_PIL = False
 
-# Claude/Anthropic API
+# Google Gemini API
 try:
-    import anthropic
-    HAS_ANTHROPIC = True
+    from google import genai
+    HAS_GEMINI = True
 except ImportError:
-    HAS_ANTHROPIC = False
+    HAS_GEMINI = False
 
 # # Replicate API (commented out - using Claude instead)
 # try:
@@ -40,8 +40,8 @@ except ImportError:
 
 
 def load_api_key():
-    """Load Anthropic API key from environment or .env file."""
-    api_key = os.getenv('ANTHROPIC_API_KEY')
+    """Load Google/Gemini API key from environment or .env file."""
+    api_key = os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
     if api_key:
         return api_key
 
@@ -51,12 +51,16 @@ def load_api_key():
         if os.path.exists(config_file):
             try:
                 with open(config_file, 'r') as f:
-                    content = f.read()
-                    match = re.search(r'ANTHROPIC_API_KEY\s*=\s*([^\s#\n]+)', content)
-                    if match:
-                        api_key = match.group(1).strip().strip('"').strip("'")
-                        if api_key and api_key != 'your-api-key-here':
-                            return api_key
+                    for line in f:
+                        line = line.strip()
+                        # Skip comments and empty lines
+                        if not line or line.startswith('#'):
+                            continue
+                        for key_name in ['GOOGLE_API_KEY', 'GEMINI_API_KEY']:
+                            if line.startswith(f'{key_name}='):
+                                api_key = line.split('=', 1)[1].strip().strip('"').strip("'")
+                                if api_key and not api_key.startswith('your-'):
+                                    return api_key
             except Exception:
                 pass
 
@@ -91,13 +95,13 @@ def capture_screenshot():
 
 
 def call_vision_api(image_bytes, instruction):
-    """Call Claude Vision API with screenshot and instruction."""
-    if not HAS_ANTHROPIC:
-        return None, "anthropic library not installed. Run: pip install anthropic"
+    """Call Gemini Vision API with screenshot and instruction."""
+    if not HAS_GEMINI:
+        return None, "google-genai library not installed. Run: pip install google-genai"
 
     api_key = load_api_key()
     if not api_key:
-        return None, "ANTHROPIC_API_KEY not found in environment or .env file"
+        return None, "GOOGLE_API_KEY not found in environment or .env file"
 
     try:
         # Build the prompt with smart context detection
@@ -118,39 +122,23 @@ def call_vision_api(image_bytes, instruction):
 
 Be direct and concise. Give actionable output, not descriptions."""
 
-        # Convert image bytes to base64
-        base64_image = base64.b64encode(image_bytes).decode('utf-8')
+        # Create Gemini client with API key
+        client = genai.Client(api_key=api_key)
 
-        # Create Anthropic client
-        client = anthropic.Anthropic(api_key=api_key)
+        # Convert image bytes to PIL Image for Gemini
+        if HAS_PIL:
+            image = Image.open(io.BytesIO(image_bytes))
+        else:
+            return None, "PIL library required for Gemini vision. Run: pip install Pillow"
 
-        # Call Claude Vision API
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2048,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/png",
-                                "data": base64_image,
-                            },
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
-                        }
-                    ],
-                }
-            ],
+        # Call Gemini Vision API
+        response = client.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=[image, prompt],
         )
 
         # Extract text from response
-        result = message.content[0].text
+        result = response.text
 
         return result, None
 
@@ -221,7 +209,7 @@ def main():
     print(f"DEBUG: Screenshot captured, size: {len(image_bytes)} bytes", file=sys.stderr)
 
     # Call vision API
-    print("DEBUG: Calling Claude Vision API...", file=sys.stderr)
+    print("DEBUG: Calling Gemini Vision API...", file=sys.stderr)
     result, error = call_vision_api(image_bytes, instruction)
     if error:
         print(json.dumps({"error": error}))

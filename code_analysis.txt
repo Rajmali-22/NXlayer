@@ -4,80 +4,48 @@ CODE STRUCTURE ANALYSIS
 
 ORIGINAL CODE:
 --------------------------------------------------------------------------------
-Here's the clean Python code for the two-sum problem:
-def two_sum(nums, target):
-    seen = {}
-    for i, num in enumerate(nums):
-        complement = target - num
-        if complement in seen:
-            return [seen[complement], i]
-        seen[num] = i
-    return []
-And here's the equivalent Java code with variables `a` and `b`:
-java
-import java.util.HashMap;
-import java.util.Map;
-public class TwoSum {
-    public int[] twoSum(int[] nums, int target) {
-        Map<Integer, Integer> seen = new HashMap<>();
-        for (int i = 0; i < nums.length; i++) {
-            int complement = target - nums[i];
-            if (seen.containsKey(complement)) {
-                return new int[]{seen.get(complement), i};
-            }
-            seen.put(nums[i], i);
-        }
-        return new int[0];
-    }
-}
+def searchInsert(nums, target):
+    left, right = 0, len(nums) - 1
+    while left <= right:
+        mid = (left + right) // 2
+        if nums[mid] == target:
+            return mid
+        elif nums[mid] < target:
+            left = mid + 1
+        else:
+            right = mid - 1
+    return left
 --------------------------------------------------------------------------------
 
 LINE-BY-LINE BREAKDOWN:
 --------------------------------------------------------------------------------
-Line   1 | Spaces:  0 | Indent: 0 | Type: CODE            | "Here's the clean Python code for the two-sum problem:"
-Line   2 | Spaces:  0 | Indent: 0 | Type: FUNCTION_DEF    | 'def two_sum(nums, target):'
-Line   3 | Spaces:  4 | Indent: 1 | Type: CODE            | '    seen = {}'
-Line   4 | Spaces:  4 | Indent: 1 | Type: LOOP            | '    for i, num in enumerate(nums):'
-Line   5 | Spaces:  8 | Indent: 2 | Type: CODE            | '        complement = target - num'
-Line   6 | Spaces:  8 | Indent: 2 | Type: CONDITIONAL     | '        if complement in seen:'
-Line   7 | Spaces: 12 | Indent: 3 | Type: RETURN          | '            return [seen[complement], i]'
-Line   8 | Spaces:  8 | Indent: 2 | Type: CODE            | '        seen[num] = i'
-Line   9 | Spaces:  4 | Indent: 1 | Type: RETURN          | '    return []'
-Line  10 | Spaces:  0 | Indent: 0 | Type: CODE            | "And here's the equivalent Java code with variables `a` and `b`:"
-Line  11 | Spaces:  0 | Indent: 0 | Type: CODE            | 'java'
-Line  12 | Spaces:  0 | Indent: 0 | Type: IMPORT          | 'import java.util.HashMap;'
-Line  13 | Spaces:  0 | Indent: 0 | Type: IMPORT          | 'import java.util.Map;'
-Line  14 | Spaces:  0 | Indent: 0 | Type: CODE            | 'public class TwoSum {'
-Line  15 | Spaces:  4 | Indent: 1 | Type: CODE            | '    public int[] twoSum(int[] nums, int target) {'
-Line  16 | Spaces:  8 | Indent: 2 | Type: CODE            | '        Map<Integer, Integer> seen = new HashMap<>();'
-Line  17 | Spaces:  8 | Indent: 2 | Type: LOOP            | '        for (int i = 0; i < nums.length; i++) {'
-Line  18 | Spaces: 12 | Indent: 3 | Type: CODE            | '            int complement = target - nums[i];'
-Line  19 | Spaces: 12 | Indent: 3 | Type: CONDITIONAL     | '            if (seen.containsKey(complement)) {'
-Line  20 | Spaces: 16 | Indent: 4 | Type: RETURN          | '                return new int[]{seen.get(complement), i};'
-Line  21 | Spaces: 12 | Indent: 3 | Type: CODE            | '            }'
-Line  22 | Spaces: 12 | Indent: 3 | Type: CODE            | '            seen.put(nums[i], i);'
-Line  23 | Spaces:  8 | Indent: 2 | Type: CODE            | '        }'
-Line  24 | Spaces:  8 | Indent: 2 | Type: RETURN          | '        return new int[0];'
-Line  25 | Spaces:  4 | Indent: 1 | Type: CODE            | '    }'
-Line  26 | Spaces:  0 | Indent: 0 | Type: CODE            | '}'
+Line   1 | Spaces:  0 | Indent: 0 | Type: FUNCTION_DEF    | 'def searchInsert(nums, target):'
+Line   2 | Spaces:  4 | Indent: 1 | Type: CODE            | '    left, right = 0, len(nums) - 1'
+Line   3 | Spaces:  4 | Indent: 1 | Type: LOOP            | '    while left <= right:'
+Line   4 | Spaces:  8 | Indent: 2 | Type: CODE            | '        mid = (left + right) // 2'
+Line   5 | Spaces:  8 | Indent: 2 | Type: CONDITIONAL     | '        if nums[mid] == target:'
+Line   6 | Spaces: 12 | Indent: 3 | Type: RETURN          | '            return mid'
+Line   7 | Spaces:  8 | Indent: 2 | Type: CONDITIONAL     | '        elif nums[mid] < target:'
+Line   8 | Spaces: 12 | Indent: 3 | Type: CODE            | '            left = mid + 1'
+Line   9 | Spaces:  8 | Indent: 2 | Type: CONDITIONAL     | '        else:'
+Line  10 | Spaces: 12 | Indent: 3 | Type: CODE            | '            right = mid - 1'
+Line  11 | Spaces:  4 | Indent: 1 | Type: RETURN          | '    return left'
 
 ================================================================================
 STATISTICS:
 --------------------------------------------------------------------------------
-Total lines: 26
-Non-empty lines: 26
+Total lines: 11
+Non-empty lines: 11
 Blank lines: 0
-Import lines: 2
+Import lines: 0
 Function definitions: 1
-Max indentation: 16 spaces
+Max indentation: 12 spaces
 
 --------------------------------------------------------------------------------
 SEMANTIC POSITIONS (for navigation):
 --------------------------------------------------------------------------------
-Imports: lines 12-13
-  -> 'below_imports' navigates to line 14
 
 Functions found:
-  two_sum: line 2
-    -> 'above_function_two_sum' navigates to line 1
-    -> 'below_function_two_sum' navigates to line 3
+  searchInsert: line 1
+    -> 'above_function_searchInsert' navigates to line 0
+    -> 'below_function_searchInsert' navigates to line 2

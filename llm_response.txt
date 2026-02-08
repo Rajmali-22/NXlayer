@@ -3,31 +3,10 @@
   "steps": [
     {
       "num": 1,
-      "thought": "Start with imports for Java code",
-      "lines": ["import java.util.HashMap;", "import java.util.Map;", ""],
-      "nav": "ctrl_home_home",
-      "pause": "short"
-    },
-    {
-      "num": 2,
-      "thought": "Write class skeleton",
-      "lines": ["public class TwoSum {", "    public int[] twoSum(int[] nums, int target) {", "        pass", "    }", "}"],
-      "nav": "down_10_home",
-      "pause": "medium"
-    },
-    {
-      "num": 3,
-      "thought": "No helpers needed, just implement main logic",
-      "lines": ["        Map<Integer, Integer> seen = new HashMap<>();", "        for (int i = 0; i < nums.length; i++) {", "            int complement = target - nums[i];", "            if (seen.containsKey(complement)) {", "                return new int[]{seen.get(complement), i};", "            }", "            seen.put(nums[i], i);", "        }", "        return new int[0];"],
-      "nav": "inside_class",
+      "thought": "Start with function definition",
+      "lines": ["def searchInsert(nums, target):", "    left, right = 0, len(nums) - 1", "    while left <= right:", "        mid = (left + right) // 2", "        if nums[mid] == target:", "            return mid", "        elif nums[mid] < target:", "            left = mid + 1", "        else:", "            right = mid - 1", "    return left"],
+      "nav": "none",
       "pause": "long"
-    },
-    {
-      "num": 4,
-      "thought": "Add Python code as a comment",
-      "lines": ["    // Here's the clean Python code for the two-sum problem:", "    // def two_sum(nums, target):", "    //     seen = {}", "    //     for i, num in enumerate(nums):", "    //         complement = target - num", "    //         if complement in seen:", "    //             return [seen[complement], i]", "    //         seen[num] = i", "    //     return []"],
-      "nav": "above_function_twoSum",
-      "pause": "short"
     }
   ]
 }

@@ -191,11 +191,11 @@ function createWindow() {
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width, height } = primaryDisplay.workAreaSize;
   
-  // Calculate position at bottom center
-  const windowWidth = 800;
-  const windowHeight = 200;
+  // Calculate position at bottom center, raised slightly from edge
+  const windowWidth = 700;
+  const windowHeight = 80;
   const x = Math.floor((width - windowWidth) / 2);
-  const y = height - windowHeight;
+  const y = height - windowHeight - 80;
   
   // Create transparent overlay window
   mainWindow = new BrowserWindow({
@@ -224,7 +224,7 @@ function createWindow() {
   isWindowVisible = true;
   
   // Prevent window from being minimized
-  mainWindow.setMinimumSize(800, 200);
+  mainWindow.setMinimumSize(700, 80);
 
   // Handle window close
   mainWindow.on('closed', () => {

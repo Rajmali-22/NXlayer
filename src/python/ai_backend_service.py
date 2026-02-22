@@ -157,18 +157,15 @@ RULES:
 
     else:
         # Default prompt mode
-        tone = context.get("tone", "professional") if context else "professional"
+        tone = context.get("tone", "normal") if context else "normal"
         tone_instructions = {
+            "normal": "Write naturally and clearly. No special tone — just be helpful and direct.",
             "professional": "Use formal, respectful, and business-appropriate language.",
             "casual": "Use friendly, relaxed, and conversational language.",
-            "friendly": "Use warm, approachable, and positive language.",
-            "formal": "Use very formal, official language.",
             "creative": "Use expressive, engaging, and imaginative language.",
-            "technical": "Use precise, clear, and jargon-appropriate language.",
-            "persuasive": "Use compelling, convincing language.",
             "concise": "Use brief, direct, and to-the-point language."
         }
-        tone_guide = tone_instructions.get(tone.lower(), tone_instructions["professional"])
+        tone_guide = tone_instructions.get(tone.lower(), tone_instructions["normal"])
 
         structured = f"""You are a versatile text assistant. Generate well-structured text content.
 

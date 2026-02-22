@@ -173,7 +173,7 @@ async function populateAgentSelector() {
 async function handleGenerate() {
     const prompt = promptInput.value.trim();
     const toneSelect = document.getElementById('tone-select');
-    const tone = toneSelect ? toneSelect.value : 'professional';
+    const tone = toneSelect ? toneSelect.value : 'normal';
     const agent = agentSelect ? agentSelect.value : 'auto';
 
     // Get settings from localStorage (synced with settings window)

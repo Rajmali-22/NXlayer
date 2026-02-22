@@ -17,67 +17,77 @@ body {
 .overlay-container {
     width: 100vw;
     height: 100vh;
-    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
 }
 
-/* Input container at bottom - 100% transparent and minimalistic */
+/* ── Prompt Bar ── */
 .input-container {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: transparent;
-    backdrop-filter: none;
-    padding: 15px 20px;
-    border: none;
-    box-shadow: none;
+    width: 100%;
+    background: rgba(20, 20, 22, 0.30);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    padding: 10px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 .input-wrapper {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
 }
 
+/* ── Selects ── */
 .agent-select,
 .tone-select {
-    padding: 12px 16px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    color: #fff;
-    font-size: 14px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 10px;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 12px;
     outline: none;
     cursor: pointer;
     transition: all 0.2s;
-    min-width: 120px;
+    min-width: 0;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='rgba(255,255,255,0.4)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 24px;
+}
+
+.agent-select:hover,
+.tone-select:hover {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.18);
+    color: rgba(255, 255, 255, 0.9);
 }
 
 .agent-select:focus,
 .tone-select:focus {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(100, 150, 255, 0.5);
-    box-shadow: 0 0 0 3px rgba(100, 150, 255, 0.1);
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
 }
 
 .agent-select option,
 .tone-select option {
-    background: #282828;
+    background: #1e1e1e;
     color: #fff;
 }
 
 .agent-select optgroup {
-    background: #282828;
-    color: rgba(255, 255, 255, 0.5);
+    background: #1e1e1e;
+    color: rgba(255, 255, 255, 0.45);
     font-style: normal;
-    font-size: 12px;
+    font-size: 11px;
 }
 
-.agent-select {
-    min-width: 140px;
-}
-
-/* Humanize toggle switch */
+/* ── Humanize toggle ── */
 .humanize-toggle {
     display: flex;
     align-items: center;
@@ -132,38 +142,38 @@ body {
     color: rgba(255, 255, 255, 0.9);
 }
 
+/* ── Prompt Input ── */
 .prompt-input {
     flex: 1;
-    padding: 12px 16px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
+    padding: 9px 14px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 10px;
     color: #fff;
-    font-size: 14px;
+    font-size: 13px;
     outline: none;
     transition: all 0.2s;
 }
 
 .prompt-input:focus {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(100, 150, 255, 0.5);
-    box-shadow: 0 0 0 3px rgba(100, 150, 255, 0.1);
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.25);
 }
 
 .prompt-input::placeholder {
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.35);
 }
 
-/* Microphone button styles */
+/* ── Mic Button ── */
 .mic-btn {
     position: relative;
-    width: 44px;
-    height: 44px;
+    width: 36px;
+    height: 36px;
     padding: 0;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    color: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 10px;
+    color: rgba(255, 255, 255, 0.5);
     cursor: pointer;
     transition: all 0.2s;
     display: flex;
@@ -173,41 +183,41 @@ body {
 }
 
 .mic-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #fff;
-    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.10);
+    color: rgba(255, 255, 255, 0.85);
+    border-color: rgba(255, 255, 255, 0.18);
 }
 
 .mic-btn.recording {
-    background: rgba(255, 59, 48, 0.2);
-    border-color: rgba(255, 59, 48, 0.5);
+    background: rgba(255, 59, 48, 0.15);
+    border-color: rgba(255, 59, 48, 0.4);
     color: #ff3b30;
     animation: pulse-border 1.5s infinite;
 }
 
 .mic-btn.processing {
-    background: rgba(100, 150, 255, 0.2);
-    border-color: rgba(100, 150, 255, 0.5);
+    background: rgba(100, 150, 255, 0.15);
+    border-color: rgba(100, 150, 255, 0.4);
     color: #6496ff;
     cursor: wait;
 }
 
 .mic-btn:disabled {
-    opacity: 0.5;
+    opacity: 0.4;
     cursor: not-allowed;
 }
 
 .mic-icon {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
 }
 
 .recording-indicator {
     position: absolute;
-    top: 6px;
-    right: 6px;
-    width: 8px;
-    height: 8px;
+    top: 5px;
+    right: 5px;
+    width: 6px;
+    height: 6px;
     background: #ff3b30;
     border-radius: 50%;
     opacity: 0;
@@ -220,8 +230,8 @@ body {
 }
 
 @keyframes pulse-border {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.4); }
-    50% { box-shadow: 0 0 0 4px rgba(255, 59, 48, 0.1); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.3); }
+    50% { box-shadow: 0 0 0 3px rgba(255, 59, 48, 0.08); }
 }
 
 @keyframes pulse-dot {
@@ -229,71 +239,75 @@ body {
     50% { transform: scale(1.2); opacity: 0.7; }
 }
 
+/* ── Send / Generate Button (Arrow) ── */
 .generate-btn {
-    padding: 12px 24px;
-    background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%);
-    border: none;
-    border-radius: 8px;
-    color: #fff;
-    font-size: 14px;
-    font-weight: 600;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    color: rgba(255, 255, 255, 0.7);
     cursor: pointer;
     transition: all 0.2s;
-    white-space: nowrap;
-    box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
 
 .generate-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(255, 107, 53, 0.5);
-    background: linear-gradient(135deg, #ff7a4a 0%, #ffa64d 100%);
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.25);
 }
 
 .generate-btn:active {
-    transform: translateY(0);
+    transform: scale(0.95);
 }
 
 .generate-btn:disabled {
-    opacity: 0.5;
+    opacity: 0.35;
     cursor: not-allowed;
     transform: none;
 }
 
+/* ── Status ── */
 .status {
-    margin-top: 10px;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.8);
+    margin-top: 6px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
 }
 
 .status.error {
-    background: rgba(255, 59, 48, 0.2);
-    color: #ff3b30;
+    background: rgba(255, 59, 48, 0.15);
+    color: #ff6b6b;
 }
 
 .status.success {
-    background: rgba(52, 199, 89, 0.2);
+    background: rgba(52, 199, 89, 0.15);
     color: #34c759;
 }
 
 .status.loading {
-    background: rgba(100, 150, 255, 0.2);
+    background: rgba(100, 150, 255, 0.15);
     color: #6496ff;
 }
 
-/* Output display at top left */
+/* ── Output Display ── */
 .output-display {
     position: fixed;
     max-width: 600px;
     min-width: 400px;
     width: 90%;
-    max-width: 600px;
-    background: rgba(30, 30, 30, 0.98);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    background: rgba(20, 20, 22, 0.30);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
     z-index: 1000;
     left: 20px;
     top: 20px;
@@ -316,38 +330,40 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    color: #fff;
-    font-size: 13px;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 12px;
     font-weight: 600;
+    border-radius: 14px 14px 0 0;
 }
 
 .close-btn {
     background: none;
     border: none;
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 24px;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 20px;
     cursor: pointer;
     padding: 0;
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
+    border-radius: 6px;
     transition: all 0.2s;
 }
 
 .close-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.8);
 }
 
 .output-text {
-    padding: 16px;
-    color: #e0e0e0;
-    font-size: 14px;
+    padding: 14px;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 13px;
     line-height: 1.6;
     white-space: pre-wrap;
     word-wrap: break-word;
@@ -356,17 +372,16 @@ body {
 }
 
 .output-text::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
 }
 
 .output-text::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 4px;
+    background: transparent;
 }
 
 .output-text::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
 }
 
 .output-text::-webkit-scrollbar-thumb:hover {
@@ -374,22 +389,23 @@ body {
 }
 
 .output-footer {
-    padding: 10px 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(0, 0, 0, 0.2);
+    padding: 8px 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.10);
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 0 0 14px 14px;
 }
 
 .hint {
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 12px;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 11px;
 }
 
 kbd {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 4px;
-    padding: 2px 6px;
+    padding: 2px 5px;
     font-family: monospace;
-    font-size: 11px;
+    font-size: 10px;
     margin: 0 2px;
 }

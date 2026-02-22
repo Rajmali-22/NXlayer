@@ -209,7 +209,7 @@ function createWindow() {
     y: y
   });
 
-  mainWindow.loadFile('index.html');
+  mainWindow.loadFile(path.join('src', 'renderer', 'index.html'));
   
   // Show window initially so user knows it's running
   // User can hide it with Ctrl+Shift+Space
@@ -252,7 +252,7 @@ function createOutputWindow() {
     }
   });
 
-  outputWindow.loadFile('output.html');
+  outputWindow.loadFile(path.join('src', 'renderer', 'output.html'));
   outputWindow.hide();
 
   // Exclude from screen capture so the suggestion popup is invisible in Meet/Zoom/Teams when sharing screen
@@ -284,7 +284,7 @@ function createExplanationWindow() {
     }
   });
 
-  explanationWindow.loadFile('explanation.html');
+  explanationWindow.loadFile(path.join('src', 'renderer', 'explanation.html'));
   explanationWindow.hide();
 
   // Exclude from screen capture
@@ -332,7 +332,7 @@ function createSettingsWindow() {
     }
   });
 
-  settingsWindow.loadFile('settings.html');
+  settingsWindow.loadFile(path.join('src', 'renderer', 'settings.html'));
 
   // Exclude from screen capture (invisible in Meet/Zoom when sharing)
   setWindowExcludeFromCapture(settingsWindow);
@@ -352,7 +352,7 @@ function createSettingsWindow() {
 // ============== Keystroke Monitor ==============
 
 function startKeystrokeMonitor() {
-  const pythonScript = path.join(__dirname, 'keystroke_monitor.py');
+  const pythonScript = path.join(__dirname, 'src', 'python', 'keystroke_monitor.py');
 
   keystrokeMonitor = spawn(getPythonCommand(), [pythonScript], {
     cwd: __dirname,
@@ -444,7 +444,7 @@ function stopKeystrokeMonitor() {
 // ============== AI Backend Service (Persistent) ==============
 
 function startAIBackend() {
-  const pythonScript = path.join(__dirname, 'ai_backend_service.py');
+  const pythonScript = path.join(__dirname, 'src', 'python', 'ai_backend_service.py');
 
   // Use cached env (loaded once at startup)
   const env = cachedEnv || process.env;
@@ -745,7 +745,7 @@ async function autoInjectWithBackspace(text, backspaceCount, humanize = false) {
   text = normalizeTextForInjection(text);
 
   return new Promise((resolve) => {
-    const pythonInjectPath = path.join(__dirname, 'keyboard_inject.py');
+    const pythonInjectPath = path.join(__dirname, 'src', 'python', 'keyboard_inject.py');
 
     // Escape text for Python (will be unescaped by keyboard_inject.py)
     let escapedText = text
@@ -792,64 +792,6 @@ async function autoInjectWithBackspace(text, backspaceCount, humanize = false) {
     pythonProcess.on('error', (err) => {
       clipboard.writeText(text);
       resolve({ success: true, method: 'clipboard-fallback' });
-    });
-  });
-}
-
-async function generateTextForMode(mode, buffer, extraParam = null) {
-  return new Promise((resolve, reject) => {
-    const pythonScript = path.join(__dirname, 'text_ai_backend.py');
-
-    // Build context based on mode
-    const context = { mode: mode };
-
-    if (mode === 'extension' && extraParam) {
-      context.last_output = extraParam;
-    } else if (mode === 'clipboard_with_instruction' && extraParam) {
-      // extraParam is the typed instruction
-      context.instruction = extraParam;
-    }
-
-    const promptJson = JSON.stringify(buffer);
-    const contextJson = JSON.stringify(context);
-
-    console.log('generateTextForMode - mode:', mode, 'buffer length:', buffer.length);
-    console.log('Context JSON:', contextJson);
-
-    const args = [pythonScript, promptJson, contextJson];
-
-    // Use cached env (loaded once at startup)
-    const env = cachedEnv || process.env;
-
-    // Use spawn without shell to avoid escaping issues
-    const pythonProcess = spawn(getPythonCommand(), args, {
-      cwd: __dirname,
-      shell: false,
-      env: env
-    });
-
-    let output = '';
-    let errorOutput = '';
-
-    pythonProcess.stdout.on('data', (data) => {
-      output += data.toString();
-    });
-
-    pythonProcess.stderr.on('data', (data) => {
-      errorOutput += data.toString();
-    });
-
-    pythonProcess.on('close', (code) => {
-      if (code === 0) {
-        try {
-          const result = JSON.parse(output);
-          resolve(result);
-        } catch (e) {
-          reject(new Error('Failed to parse Python output: ' + output));
-        }
-      } else {
-        reject(new Error('Python script error: ' + errorOutput));
-      }
     });
   });
 }
@@ -1013,7 +955,7 @@ async function processVisionAnalysis(instruction) {
   await new Promise(resolve => setTimeout(resolve, 200));
 
   // Call Python script for screenshot + vision
-  const pythonScript = path.join(__dirname, 'screenshot_vision.py');
+  const pythonScript = path.join(__dirname, 'src', 'python', 'screenshot_vision.py');
 
   try {
     const instructionJson = JSON.stringify(instruction || '');
@@ -1248,8 +1190,8 @@ app.whenReady().then(() => {
 
       // Check if Ultra Human typing is enabled (for coding interviews)
       if (ultraHumanEnabled) {
-        // Use pyautogui_typer_V3 directly - pass problem, let it generate and type code
-        const typerScript = path.join(__dirname, 'pyautogui_typer_V3 (1).py');
+        // Use human_typer directly - pass problem, let it generate and type code
+        const typerScript = path.join(__dirname, 'src', 'python', 'human_typer.py');
 
         try {
           // Small delay to ensure focus is on target app
@@ -1268,7 +1210,7 @@ app.whenReady().then(() => {
           // Set UTF-8 encoding for emoji support
           const env = { ...(cachedEnv || process.env), PYTHONIOENCODING: 'utf-8' };
 
-          // Call pyautogui_typer_V3 directly with the problem
+          // Call human_typer directly with the problem
           const ultraProcess = spawn(getPythonCommand(), [typerScript, problemText], {
             cwd: __dirname,
             shell: false,
@@ -1320,7 +1262,7 @@ app.whenReady().then(() => {
       }
 
       // Use Python-based keyboard injection (pynput) - normal mode
-      const pythonInjectPath = path.join(__dirname, 'keyboard_inject.py');
+      const pythonInjectPath = path.join(__dirname, 'src', 'python', 'keyboard_inject.py');
 
       try {
         // Small delay to ensure focus is on target app
@@ -1464,7 +1406,7 @@ function startVoiceRecording() {
   }
 
   // Start Python recording (saves to temp file)
-  const pythonScript = path.join(__dirname, 'voice_transcribe.py');
+  const pythonScript = path.join(__dirname, 'src', 'python', 'voice_transcribe.py');
   voiceProcess = spawn(getPythonCommand(), [pythonScript, '--record'], {
     cwd: __dirname
   });
@@ -1515,7 +1457,7 @@ function stopVoiceRecording() {
 }
 
 function transcribeSavedRecording() {
-  const pythonScript = path.join(__dirname, 'voice_transcribe.py');
+  const pythonScript = path.join(__dirname, 'src', 'python', 'voice_transcribe.py');
   const transcribeProcess = spawn(getPythonCommand(), [pythonScript, '--transcribe'], {
     cwd: __dirname
   });
@@ -1771,7 +1713,7 @@ ipcMain.handle('auto-inject-text', async (event, text, humanize = false) => {
     await new Promise(resolve => setTimeout(resolve, 150));
 
     // Inject using Python
-    const pythonInjectPath = path.join(__dirname, 'keyboard_inject.py');
+    const pythonInjectPath = path.join(__dirname, 'src', 'python', 'keyboard_inject.py');
 
     return new Promise((resolve) => {
       // Escape text for Python (will be unescaped by keyboard_inject.py)
@@ -1847,7 +1789,7 @@ ipcMain.handle('inject-text', async (event, text) => {
     await new Promise(resolve => setTimeout(resolve, 150));
 
     // Use Python-based keyboard injection (pynput)
-    const pythonInjectPath = path.join(__dirname, 'keyboard_inject.py');
+    const pythonInjectPath = path.join(__dirname, 'src', 'python', 'keyboard_inject.py');
 
     return new Promise((resolve) => {
       // Escape the text for command line
@@ -1896,7 +1838,7 @@ ipcMain.handle('transcribe-audio', async (event, options = {}) => {
     const timeout = options.timeout || 10;
     const phraseTimeout = options.phraseTimeout || 5;
 
-    const pythonScript = path.join(__dirname, 'voice_transcribe.py');
+    const pythonScript = path.join(__dirname, 'src', 'python', 'voice_transcribe.py');
 
     const pythonProcess = spawn(getPythonCommand(), [pythonScript, '--live', timeout.toString(), phraseTimeout.toString()], {
       cwd: __dirname

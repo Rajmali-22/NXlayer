@@ -20,7 +20,7 @@ PAUSE_SHORT = (0.3, 0.6)
 PAUSE_MEDIUM = (0.7, 1.2)
 PAUSE_LONG = (1.5, 2.5)
 TYPO_CHANCE = 0.25
-LOG_FILE = "typing_debug.log"
+LOG_FILE = os.path.join("data", "typing_debug.log")
 
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.08
@@ -597,9 +597,9 @@ Now generate the JSON sequence for the target code above. Output ONLY the JSON:"
         result = response.choices[0].message.content.strip()
         
         # Save raw response for debugging
-        with open('llm_response.txt', 'w') as f:
+        with open(os.path.join('data', 'llm_response.txt'), 'w') as f:
             f.write(result)
-        print("[SAVED] Raw LLM response: llm_response.txt")
+        print("[SAVED] Raw LLM response: data/llm_response.txt")
         
         # Try to extract JSON
         json_match = re.search(r'\{.*\}', result, re.DOTALL)
@@ -611,9 +611,9 @@ Now generate the JSON sequence for the target code above. Output ONLY the JSON:"
             # Validate structure
             if 'steps' in sequence and len(sequence['steps']) > 0:
                 # Save the JSON sequence for analysis
-                with open('typing_sequence.json', 'w') as f:
+                with open(os.path.join('data', 'typing_sequence.json'), 'w') as f:
                     json.dump(sequence, f, indent=2)
-                print(f"[SAVED] Typing sequence: typing_sequence.json")
+                print(f"[SAVED] Typing sequence: data/typing_sequence.json")
                 
                 print(f"[OK] Generated sequence with {len(sequence['steps'])} steps")
                 
@@ -1021,7 +1021,7 @@ FEATURES:
     print("="*70)
     
     # Save code analysis for research
-    save_code_analysis(final_code, "code_analysis.txt")
+    save_code_analysis(final_code, os.path.join("data", "code_analysis.txt"))
     
     # Generate typing sequence
     sequence = generate_human_sequence(client, final_code, presignature)
@@ -1053,10 +1053,10 @@ FEATURES:
     print("="*70)
     
     print("\n[FILES CREATED]")
-    print("  - typing_debug.log : Keystroke log")
-    print("  - typing_sequence.json : Chain of thought JSON")
-    print("  - code_analysis.txt : Code structure analysis")
-    print("  - llm_response.txt : Raw LLM response")
+    print("  - data/typing_debug.log : Keystroke log")
+    print("  - data/typing_sequence.json : Chain of thought JSON")
+    print("  - data/code_analysis.txt : Code structure analysis")
+    print("  - data/llm_response.txt : Raw LLM response")
 
 if __name__ == "__main__":
     try:

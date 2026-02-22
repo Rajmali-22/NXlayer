@@ -3,7 +3,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 
 # Load keylog data
-with open('keylog.json', 'r') as f:
+with open('data/keylog.json', 'r') as f:
     data = json.load(f)
 
 # Calculate time differences between consecutive keystrokes
@@ -50,7 +50,7 @@ ax2.legend()
 ax2.set_ylim(0, 30)
 
 plt.tight_layout()
-plt.savefig('keystroke_analysis.png', dpi=150)
+plt.savefig('data/keystroke_analysis.png', dpi=150)
 plt.show()
 
 # Print basic stats

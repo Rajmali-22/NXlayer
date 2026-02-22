@@ -8,8 +8,8 @@ class Config:
     """All configuration constants."""
 
     # === File Paths ===
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    LOG_FILE = os.path.join(BASE_DIR, "keylog.json")
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    LOG_FILE = os.path.join(BASE_DIR, "data", "keylog.json")
 
     # === Buffer Limits ===
     MAX_BUFFER_SIZE = 10000      # Max characters in typing buffer

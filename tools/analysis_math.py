@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 
 # Load keylog data
-with open('keylog.json', 'r') as f:
+with open('data/keylog.json', 'r') as f:
     data = json.load(f)
 
 # Calculate time differences

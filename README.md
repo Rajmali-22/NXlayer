@@ -91,23 +91,34 @@ For coding interviews - types code like a real developer:
 ## Project Structure
 
 ```
-ghosttype/
-├── main.js                      # Electron main process
-├── ai_backend_service.py        # Persistent AI backend
-├── smart_prompts.py             # Context-aware prompting
-├── keyboard_inject.py           # Text injection (pynput)
-├── keystroke_monitor.py         # Keyboard monitoring
-├── pyautogui_typer_V3 (1).py    # Human-like code typing
-├── pyautogui_typer_V3_Sign (1).py  # LeetCode-style typing
-├── screenshot_vision.py         # Vision AI (Claude)
-├── voice_transcribe.py          # Speech recognition
-├── index.html                   # Main overlay UI
-├── output.html                  # Suggestion popup
-├── explanation.html             # Code explanation window
-├── settings.html                # Settings UI
-├── settings_renderer.js         # Settings logic
-├── renderer.js                  # Frontend logic
-└── requirements.txt             # Python dependencies
+GHOSTYPE/
+├── main.js                          # Electron main process
+├── package.json                     # Node dependencies
+├── requirements.txt                 # Python dependencies
+├── .env                             # API keys (not committed)
+├── config.example.env               # Example config
+├── src/
+│   ├── python/                      # Python services
+│   │   ├── ai_backend_service.py    # Persistent AI backend
+│   │   ├── keyboard_inject.py       # Text injection (pynput)
+│   │   ├── screenshot_vision.py     # Vision AI (Gemini)
+│   │   ├── voice_transcribe.py      # Speech recognition
+│   │   ├── smart_prompts.py         # Context-aware prompting
+│   │   ├── human_typer.py           # Human-like code typing
+│   │   ├── keystroke_monitor.py     # Monitor entry point
+│   │   └── keystroke_monitor/       # Monitor package
+│   └── renderer/                    # Electron frontend
+│       ├── index.html               # Main overlay UI
+│       ├── output.html              # Suggestion popup
+│       ├── explanation.html         # Code explanation window
+│       ├── settings.html            # Settings UI
+│       ├── styles.css               # Styles
+│       ├── renderer.js              # Frontend logic
+│       └── settings_renderer.js     # Settings logic
+├── tests/                           # Test suite
+├── tools/                           # Dev/analysis scripts
+├── data/                            # Runtime-generated files
+└── docs/                            # Documentation
 ```
 
 ## Requirements

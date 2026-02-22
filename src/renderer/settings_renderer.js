@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadSettings();
     setupEventListeners();
     updateUI();
+    initProviderUI();
 });
 
 function setupEventListeners() {
@@ -174,6 +175,180 @@ function applyTheme() {
         body.classList.remove('light-mode');
     } else {
         body.classList.add('light-mode');
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PROVIDER MANAGEMENT UI
+// ══════════════════════════════════════════════════════════════════════════════
+
+const PROVIDER_NAMES = {
+    'GROQ_API_KEY': 'Groq',
+    'MISTRAL_API_KEY': 'Mistral',
+    'DEEPSEEK_API_KEY': 'DeepSeek',
+    'ANTHROPIC_API_KEY': 'Anthropic',
+    'OPENAI_API_KEY': 'OpenAI',
+    'GEMINI_API_KEY': 'Gemini',
+    'XAI_API_KEY': 'xAI (Grok)',
+    'TOGETHERAI_API_KEY': 'Together AI',
+    'PERPLEXITYAI_API_KEY': 'Perplexity',
+    'COHERE_API_KEY': 'Cohere',
+    'REPLICATE_API_TOKEN': 'Replicate',
+};
+
+// Models for each provider (for testing)
+const PROVIDER_TEST_MODELS = {
+    'GROQ_API_KEY': 'groq/llama-3.3-70b-versatile',
+    'MISTRAL_API_KEY': 'mistral/mistral-small-latest',
+    'DEEPSEEK_API_KEY': 'deepseek/deepseek-chat',
+    'ANTHROPIC_API_KEY': 'anthropic/claude-sonnet-4-20250514',
+    'OPENAI_API_KEY': 'openai/gpt-4o-mini',
+    'GEMINI_API_KEY': 'gemini/gemini-2.0-flash',
+    'XAI_API_KEY': 'xai/grok-2-latest',
+    'TOGETHERAI_API_KEY': 'together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    'PERPLEXITYAI_API_KEY': 'perplexity/sonar-pro',
+    'COHERE_API_KEY': 'cohere_chat/command-r-plus',
+    'REPLICATE_API_TOKEN': 'replicate/meta/llama-3.1-405b-instruct',
+};
+
+async function initProviderUI() {
+    const saveKeyBtn = document.getElementById('save-key-btn');
+    const keyStatus = document.getElementById('key-status');
+
+    if (saveKeyBtn) {
+        saveKeyBtn.addEventListener('click', async () => {
+            const providerSelect = document.getElementById('new-key-provider');
+            const keyInput = document.getElementById('new-key-input');
+            const provider = providerSelect.value;
+            const key = keyInput.value.trim();
+
+            if (!provider) {
+                keyStatus.textContent = 'Select a provider';
+                keyStatus.className = 'key-status error';
+                return;
+            }
+            if (!key) {
+                keyStatus.textContent = 'Enter an API key';
+                keyStatus.className = 'key-status error';
+                return;
+            }
+
+            try {
+                const result = await ipcRenderer.invoke('save-api-key', provider, key);
+                if (result.success) {
+                    keyStatus.textContent = 'Key saved! Restart AI backend to apply.';
+                    keyStatus.className = 'key-status success';
+                    keyInput.value = '';
+                    providerSelect.value = '';
+                    // Refresh provider cards
+                    await refreshProviderCards();
+                } else {
+                    keyStatus.textContent = 'Error: ' + (result.error || 'Unknown error');
+                    keyStatus.className = 'key-status error';
+                }
+            } catch (e) {
+                keyStatus.textContent = 'Error: ' + e.message;
+                keyStatus.className = 'key-status error';
+            }
+        });
+    }
+
+    await refreshProviderCards();
+}
+
+async function refreshProviderCards() {
+    const container = document.getElementById('provider-cards');
+    if (!container) return;
+
+    try {
+        const providers = await ipcRenderer.invoke('get-providers');
+        container.innerHTML = '';
+
+        const configured = providers.filter(p => p.configured);
+        if (configured.length === 0) {
+            container.innerHTML = '<div style="padding: 12px 20px; font-size: 13px; color: var(--text-secondary);">No providers configured. Add an API key below.</div>';
+            return;
+        }
+
+        for (const p of configured) {
+            const name = PROVIDER_NAMES[p.envVar] || p.envVar;
+            const card = document.createElement('div');
+            card.className = 'provider-card';
+            card.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span class="status-badge active"></span>
+                    <span class="provider-name">${name}</span>
+                </div>
+                <div class="provider-actions">
+                    <button class="test-btn" data-env="${p.envVar}">Test</button>
+                    <button class="remove-btn" data-env="${p.envVar}" title="Remove key">×</button>
+                </div>
+            `;
+            container.appendChild(card);
+        }
+
+        // Attach event listeners
+        container.querySelectorAll('.test-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const envVar = btn.dataset.env;
+                const model = PROVIDER_TEST_MODELS[envVar];
+                if (!model) return;
+
+                btn.textContent = '...';
+                btn.className = 'test-btn testing';
+
+                try {
+                    const result = await ipcRenderer.invoke('test-provider', model);
+                    if (result.success) {
+                        btn.textContent = 'Pass';
+                        btn.className = 'test-btn pass';
+                    } else {
+                        btn.textContent = 'Fail';
+                        btn.className = 'test-btn fail';
+                        btn.title = result.message || 'Test failed';
+                    }
+                } catch (e) {
+                    btn.textContent = 'Fail';
+                    btn.className = 'test-btn fail';
+                }
+
+                // Reset after 3 seconds
+                setTimeout(() => {
+                    btn.textContent = 'Test';
+                    btn.className = 'test-btn';
+                    btn.title = '';
+                }, 3000);
+            });
+        });
+
+        container.querySelectorAll('.remove-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const envVar = btn.dataset.env;
+                try {
+                    await ipcRenderer.invoke('save-api-key', envVar, '');
+                    await refreshProviderCards();
+                } catch (e) {
+                    console.error('Failed to remove key:', e);
+                }
+            });
+        });
+
+        // Update default provider dropdown
+        const defaultSelect = document.getElementById('default-provider');
+        if (defaultSelect) {
+            const currentVal = defaultSelect.value;
+            defaultSelect.innerHTML = '<option value="auto">Auto</option>';
+            for (const p of configured) {
+                const name = PROVIDER_NAMES[p.envVar] || p.envVar;
+                const opt = document.createElement('option');
+                opt.value = PROVIDER_TEST_MODELS[p.envVar] || p.envVar;
+                opt.textContent = name;
+                defaultSelect.appendChild(opt);
+            }
+            defaultSelect.value = currentVal;
+        }
+    } catch (e) {
+        console.error('Failed to refresh provider cards:', e);
     }
 }
 

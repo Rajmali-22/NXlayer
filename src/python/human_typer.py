@@ -11,7 +11,7 @@ import time
 import random
 import json
 from datetime import datetime
-from mistralai import Mistral
+import litellm
 import pyautogui
 
 # Config
@@ -283,34 +283,36 @@ class KeystrokeLogger:
 # MISTRAL
 # ============================================================================
 
-def load_api_key():
-    api_key = os.getenv('MISTRAL_API_KEY')
-    if api_key:
-        return api_key
-    
-    for config_file in ['.env', 'config.env']:
-        if os.path.exists(config_file):
-            try:
-                with open(config_file, 'r') as f:
-                    for line in f:
-                        if 'MISTRAL_API_KEY' in line:
-                            match = re.search(r'MISTRAL_API_KEY\s*=\s*([^\s#\n]+)', line)
-                            if match:
-                                key = match.group(1).strip().strip('"').strip("'")
-                                if key and key != 'your-api-key-here':
-                                    return key
-            except:
-                pass
+def _find_available_model():
+    """Find the best available model for code generation via litellm."""
+    # Prefer powerful models for code gen
+    model_candidates = [
+        ("GROQ_API_KEY",      "groq/llama-3.3-70b-versatile"),
+        ("DEEPSEEK_API_KEY",  "deepseek/deepseek-chat"),
+        ("OPENAI_API_KEY",    "openai/gpt-4o"),
+        ("ANTHROPIC_API_KEY", "anthropic/claude-sonnet-4-20250514"),
+        ("MISTRAL_API_KEY",   "mistral/mistral-small-latest"),
+        ("GEMINI_API_KEY",    "gemini/gemini-2.0-flash"),
+        ("OPENAI_API_KEY",    "openai/gpt-4o-mini"),
+    ]
+    seen = set()
+    for env_var, model in model_candidates:
+        key = os.environ.get(env_var, "")
+        if key and "your-" not in key and model not in seen:
+            return model
+        seen.add(model)
     return None
 
 def init_llm():
-    api_key = load_api_key()
-    if not api_key:
-        print("[ERROR] MISTRAL_API_KEY not found!")
+    model = _find_available_model()
+    if not model:
+        print("[ERROR] No LLM provider API key found!")
+        print("[HINT] Set at least one: MISTRAL_API_KEY, GROQ_API_KEY, OPENAI_API_KEY, etc.")
         sys.exit(1)
-    return Mistral(api_key=api_key)
+    print(f"[OK] Using model: {model}")
+    return model
 
-def generate_final_code(client, problem, presignature=None):
+def generate_final_code(model, problem, presignature=None):
     """Generate the final code solution"""
     if presignature:
         prompt = f"""Complete this function with clean, working code:
@@ -337,14 +339,14 @@ STRICT RULES:
 4. Proper indentation
 
 Output ONLY the code without any markdown formatting."""
-    
+
     print("[LLM] Generating final code solution...")
-    
-    response = client.chat.complete(
-        model="mistral-small-latest",
+
+    response = litellm.completion(
+        model=model,
         messages=[{"role": "user", "content": prompt}]
     )
-    
+
     code = response.choices[0].message.content.strip()
     
     # Clean up markdown if present
@@ -461,11 +463,11 @@ def save_code_analysis(code, filename="code_analysis.txt"):
     
     print(f"[SAVED] Code analysis: {filename}")
 
-def generate_human_sequence(client, final_code, presignature=None):
+def generate_human_sequence(model, final_code, presignature=None):
     """LLM generates human-realistic typing sequence with chain of thought"""
-    
+
     mode = "LeetCode mode - cursor inside function body" if presignature else "Standalone mode - empty file"
-    
+
     prompt = f"""You are a coding sequence generator. Generate a realistic human typing sequence for this code:
 
 TARGET CODE:
@@ -588,8 +590,8 @@ Now generate the JSON sequence for the target code above. Output ONLY the JSON:"
     print("[LLM] Generating human typing sequence (chain of thought)...")
     
     try:
-        response = client.chat.complete(
-            model="mistral-small-latest",
+        response = litellm.completion(
+            model=model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3
         )
@@ -1008,11 +1010,10 @@ FEATURES:
     print("="*70)
     
     # Initialize LLM
-    client = init_llm()
-    print("[OK] Mistral LLM initialized")
-    
+    model = init_llm()
+
     # Generate final code
-    final_code = generate_final_code(client, problem, presignature)
+    final_code = generate_final_code(model, problem, presignature)
     
     print("\n" + "="*70)
     print("FINAL CODE TO TYPE:")
@@ -1024,7 +1025,7 @@ FEATURES:
     save_code_analysis(final_code, os.path.join("data", "code_analysis.txt"))
     
     # Generate typing sequence
-    sequence = generate_human_sequence(client, final_code, presignature)
+    sequence = generate_human_sequence(model, final_code, presignature)
     
     print(f"\n[OK] Typing sequence ready: {len(sequence['steps'])} steps")
     

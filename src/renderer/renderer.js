@@ -4,6 +4,7 @@ let promptInput = null;
 let generateBtn = null;
 let statusDiv = null;
 let micBtn = null;
+let agentSelect = null;
 
 // Voice recording state
 let isRecording = false;
@@ -13,6 +14,28 @@ document.addEventListener('DOMContentLoaded', () => {
     generateBtn = document.getElementById('generate-btn');
     statusDiv = document.getElementById('status');
     micBtn = document.getElementById('mic-btn');
+    agentSelect = document.getElementById('agent-select');
+
+    // Populate agent selector from backend
+    populateAgentSelector();
+
+    // Restore last-used agent from localStorage
+    try {
+        const savedAgent = localStorage.getItem('ghosttype-agent');
+        if (savedAgent && agentSelect) {
+            agentSelect.value = savedAgent;
+        }
+    } catch (e) {}
+
+    // Save agent selection on change
+    if (agentSelect) {
+        agentSelect.addEventListener('change', () => {
+            try {
+                localStorage.setItem('ghosttype-agent', agentSelect.value);
+            } catch (e) {}
+            ipcRenderer.send('settings-agent-change', agentSelect.value);
+        });
+    }
 
     // Generate button click
     generateBtn.addEventListener('click', handleGenerate);
@@ -73,6 +96,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // When AI backend pushes updated agents list, repopulate the dropdown
+    ipcRenderer.on('agents-updated', (event, agents) => {
+        if (agents && agents.length > 0 && agentSelect) {
+            populateAgentSelectorWithData(agents);
+        }
+    });
+
     // Clear prompt input when requested (after injection or cancel)
     ipcRenderer.on('clear-prompt', () => {
         if (promptInput) {
@@ -86,10 +116,65 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
+function populateAgentSelectorWithData(agents) {
+    if (!agents || !agentSelect) return;
+
+    // Clear existing options
+    agentSelect.innerHTML = '';
+
+    // Group agents
+    const groups = { auto: [], fast: [], powerful: [], reasoning: [] };
+    for (const a of agents) {
+        const g = a.group || 'powerful';
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(a);
+    }
+
+    // Add Auto first
+    for (const a of (groups.auto || [])) {
+        const opt = document.createElement('option');
+        opt.value = a.value;
+        opt.textContent = a.label;
+        agentSelect.appendChild(opt);
+    }
+
+    // Add grouped models
+    const groupLabels = { fast: 'Fast', powerful: 'Powerful', reasoning: 'Reasoning' };
+    for (const gName of ['fast', 'powerful', 'reasoning']) {
+        const items = groups[gName] || [];
+        if (items.length === 0) continue;
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = groupLabels[gName];
+        for (const a of items) {
+            const opt = document.createElement('option');
+            opt.value = a.value;
+            opt.textContent = a.label;
+            optgroup.appendChild(opt);
+        }
+        agentSelect.appendChild(optgroup);
+    }
+
+    // Restore saved selection
+    const savedAgent = localStorage.getItem('ghosttype-agent');
+    if (savedAgent) {
+        agentSelect.value = savedAgent;
+    }
+}
+
+async function populateAgentSelector() {
+    try {
+        const agents = await ipcRenderer.invoke('get-agents');
+        populateAgentSelectorWithData(agents);
+    } catch (e) {
+        console.error('Failed to populate agent selector:', e);
+    }
+}
+
 async function handleGenerate() {
     const prompt = promptInput.value.trim();
     const toneSelect = document.getElementById('tone-select');
     const tone = toneSelect ? toneSelect.value : 'professional';
+    const agent = agentSelect ? agentSelect.value : 'auto';
 
     // Get settings from localStorage (synced with settings window)
     let humanize = false;
@@ -112,7 +197,7 @@ async function handleGenerate() {
     showStatus('Generating text...', 'loading');
 
     try {
-        const context = { tone: tone, humanize: humanize };
+        const context = { tone: tone, humanize: humanize, agent: agent };
         const result = await ipcRenderer.invoke('generate-text', prompt, context);
 
         if (result.error) {

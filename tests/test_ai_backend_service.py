@@ -1,4 +1,4 @@
-"""Tests for ai_backend_service.py - API key loading, clean_response, build_messages, handle_request."""
+"""Tests for ai_backend_service.py — clean_response, build_messages, handle_request with ProviderManager."""
 import json
 import os
 import sys
@@ -7,28 +7,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-# Import after path setup
 import ai_backend_service as svc
-
-
-class TestLoadApiKey:
-    """Test load_api_key from environment and config files."""
-
-    def test_load_api_key_from_env(self):
-        with patch.dict(os.environ, {"MISTRAL_API_KEY": "env-key-123"}, clear=False):
-            assert svc.load_api_key() == "env-key-123"
-
-    def test_load_api_key_returns_none_when_missing(self):
-        with patch.dict(os.environ, {"MISTRAL_API_KEY": ""}, clear=False):
-            with patch("os.path.exists", return_value=False):
-                assert svc.load_api_key() is None
-
-    def test_load_api_key_from_file_skips_your_key(self):
-        with patch.dict(os.environ, {}, clear=True):
-            with patch("os.path.exists", return_value=True):
-                with patch("builtins.open", MagicMock(return_value=StringIO("MISTRAL_API_KEY=your-api-key-here"))):
-                    key = svc.load_api_key()
-                    assert key is None
 
 
 class TestCleanResponse:
@@ -84,26 +63,76 @@ class TestBuildMessages:
         assert "def two_sum" in messages[1]["content"]
         assert "Explain" in messages[0]["content"] or "interview" in messages[0]["content"].lower()
 
+    def test_build_messages_clipboard_with_instruction(self):
+        messages = svc.build_messages("some text", {"mode": "clipboard_with_instruction", "instruction": "summarize"})
+        assert len(messages) == 2
+        assert "summarize" in messages[1]["content"]
+        assert "some text" in messages[1]["content"]
+
 
 class TestHandleRequest:
-    """Test handle_request command routing (with mocked client and IPC)."""
+    """Test handle_request command routing (with mocked ProviderManager and IPC)."""
+
+    def _make_mock_pm(self):
+        pm = MagicMock()
+        pm.resolve_model.return_value = "groq/llama-3.3-70b-versatile"
+        pm.get_model_group.return_value = "fast"
+        pm.get_memory_history.return_value = []
+        pm.get_available_agents.return_value = [
+            {"value": "auto", "label": "Auto", "group": "auto"},
+        ]
+        pm.test_provider.return_value = {"success": True, "message": "ok"}
+        return pm
 
     def test_handle_request_ping_sends_pong(self):
+        pm = self._make_mock_pm()
         with patch.object(svc.IPC, "send") as mock_send:
-            svc.handle_request({"cmd": "ping"}, MagicMock())
+            svc.handle_request({"cmd": "ping"}, pm)
             mock_send.assert_called()
             call_arg = mock_send.call_args[0][0]
             assert call_arg.get("event") == "pong"
 
     def test_handle_request_unknown_command_sends_error(self):
+        pm = self._make_mock_pm()
         with patch.object(svc.IPC, "send_error") as mock_err:
-            svc.handle_request({"cmd": "unknown_cmd"}, MagicMock())
+            svc.handle_request({"cmd": "unknown_cmd"}, pm)
             mock_err.assert_called_once()
             assert "Unknown command" in mock_err.call_args[0][0]
 
     def test_handle_request_generate_empty_prompt_sends_complete_with_error(self):
+        pm = self._make_mock_pm()
         with patch.object(svc.IPC, "send") as mock_send:
-            svc.handle_request({"cmd": "generate", "prompt": "", "context": {}}, MagicMock())
+            svc.handle_request({"cmd": "generate", "prompt": "", "context": {}}, pm)
             call_arg = mock_send.call_args[0][0]
             assert call_arg.get("event") == "complete"
             assert "error" in call_arg or call_arg.get("text") == ""
+
+    def test_handle_request_shutdown_returns_shutdown(self):
+        pm = self._make_mock_pm()
+        with patch.object(svc.IPC, "send"):
+            result = svc.handle_request({"cmd": "shutdown"}, pm)
+            assert result == "shutdown"
+
+    def test_handle_request_get_agents(self):
+        pm = self._make_mock_pm()
+        with patch.object(svc.IPC, "send") as mock_send:
+            svc.handle_request({"cmd": "get_agents"}, pm)
+            mock_send.assert_called()
+            call_arg = mock_send.call_args[0][0]
+            assert call_arg.get("event") == "agents"
+            assert isinstance(call_arg.get("agents"), list)
+
+    def test_handle_request_test_provider(self):
+        pm = self._make_mock_pm()
+        with patch.object(svc.IPC, "send") as mock_send:
+            svc.handle_request({"cmd": "test_provider", "model": "groq/llama-3.3-70b-versatile"}, pm)
+            mock_send.assert_called()
+            call_arg = mock_send.call_args[0][0]
+            assert call_arg.get("event") == "test_result"
+            assert call_arg.get("success") is True
+
+    def test_handle_request_test_provider_no_model(self):
+        pm = self._make_mock_pm()
+        with patch.object(svc.IPC, "send_error") as mock_err:
+            svc.handle_request({"cmd": "test_provider"}, pm)
+            mock_err.assert_called_once()

@@ -76,9 +76,22 @@
 
         /* Settings List */
         .settings-list {
-            padding: 50px 30px 30px;
+            padding: 50px 30px 60px;
             height: 100%;
             overflow-y: auto;
+        }
+
+        .settings-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .settings-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .settings-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
         }
 
         .section-title {
@@ -174,6 +187,157 @@
             transform: translateX(20px);
         }
 
+        /* Provider management styles */
+        .provider-dropdown {
+            padding: 8px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .provider-dropdown option {
+            background: rgba(28, 28, 30, 0.95);
+            color: var(--text-primary);
+        }
+
+        .key-input {
+            flex: 1;
+            padding: 8px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 13px;
+            font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+            outline: none;
+        }
+
+        .key-input:focus {
+            border-color: rgba(52, 199, 89, 0.5);
+        }
+
+        .save-key-btn {
+            padding: 8px 16px;
+            background: var(--toggle-active);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: opacity 0.15s;
+        }
+
+        .save-key-btn:hover {
+            opacity: 0.85;
+        }
+
+        .key-status {
+            font-size: 12px;
+            min-height: 16px;
+        }
+
+        .key-status.success {
+            color: var(--toggle-active);
+        }
+
+        .key-status.error {
+            color: #ff3b30;
+        }
+
+        .provider-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 20px;
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            margin-bottom: 6px;
+        }
+
+        .provider-card .provider-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .provider-card .provider-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .status-badge {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-badge.active {
+            background: var(--toggle-active);
+        }
+
+        .status-badge.inactive {
+            background: rgba(120, 120, 128, 0.32);
+        }
+
+        .test-btn {
+            padding: 4px 10px;
+            background: var(--bg-hover);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .test-btn:hover {
+            background: rgba(100, 150, 255, 0.15);
+            border-color: rgba(100, 150, 255, 0.3);
+            color: var(--text-primary);
+        }
+
+        .test-btn.testing {
+            opacity: 0.5;
+            cursor: wait;
+        }
+
+        .test-btn.pass {
+            background: rgba(52, 199, 89, 0.15);
+            border-color: rgba(52, 199, 89, 0.3);
+            color: var(--toggle-active);
+        }
+
+        .test-btn.fail {
+            background: rgba(255, 59, 48, 0.15);
+            border-color: rgba(255, 59, 48, 0.3);
+            color: #ff3b30;
+        }
+
+        .remove-btn {
+            padding: 4px 8px;
+            background: none;
+            border: 1px solid transparent;
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .remove-btn:hover {
+            background: rgba(255, 59, 48, 0.15);
+            border-color: rgba(255, 59, 48, 0.2);
+            color: #ff3b30;
+        }
+
         /* Footer shortcut hint */
         .footer {
             position: absolute;
@@ -263,6 +427,48 @@
                     <div class="toggle-track"></div>
                     <div class="toggle-thumb"></div>
                 </label>
+            </div>
+
+            <div class="section-title">AI Providers</div>
+
+            <div id="provider-section">
+                <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span class="setting-label">Default Provider</span>
+                        <select id="default-provider" class="provider-dropdown">
+                            <option value="auto">Auto</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="provider-cards"></div>
+
+                <div class="setting-item" id="add-key-section" style="flex-direction: column; align-items: stretch; gap: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span class="setting-label" style="font-size: 14px;">Add API Key</span>
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <select id="new-key-provider" class="provider-dropdown" style="flex: 1;">
+                            <option value="">Select provider...</option>
+                            <option value="GROQ_API_KEY">Groq</option>
+                            <option value="MISTRAL_API_KEY">Mistral</option>
+                            <option value="DEEPSEEK_API_KEY">DeepSeek</option>
+                            <option value="ANTHROPIC_API_KEY">Anthropic</option>
+                            <option value="OPENAI_API_KEY">OpenAI</option>
+                            <option value="GEMINI_API_KEY">Gemini</option>
+                            <option value="XAI_API_KEY">xAI (Grok)</option>
+                            <option value="TOGETHERAI_API_KEY">Together AI</option>
+                            <option value="PERPLEXITYAI_API_KEY">Perplexity</option>
+                            <option value="COHERE_API_KEY">Cohere</option>
+                            <option value="REPLICATE_API_TOKEN">Replicate</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <input type="password" id="new-key-input" class="key-input" placeholder="Paste API key...">
+                        <button id="save-key-btn" class="save-key-btn">Save</button>
+                    </div>
+                    <div id="key-status" class="key-status"></div>
+                </div>
             </div>
 
             <div class="section-title">Interview Mode</div>

@@ -5,6 +5,8 @@ AI Backend Service - Persistent process with streaming support.
 Runs continuously like keystroke_monitor.py.
 Communicates via stdin/stdout JSON messages.
 Supports streaming responses for low latency.
+
+Uses LiteLLM via ProviderManager for multi-provider support.
 """
 
 import sys
@@ -12,7 +14,9 @@ import json
 import os
 import re
 import time
-from mistralai import Mistral
+
+from providers import ProviderManager
+from providers.context import build_messages_with_memory
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -21,34 +25,6 @@ from mistralai import Mistral
 API_TIMEOUT = 30
 MAX_RETRIES = 3
 RETRY_DELAY = 2
-
-# ══════════════════════════════════════════════════════════════════════════════
-# API KEY LOADING
-# ══════════════════════════════════════════════════════════════════════════════
-
-def load_api_key():
-    """Load API key from environment or config files."""
-    # Check environment first
-    api_key = os.getenv('MISTRAL_API_KEY')
-    if api_key and 'your-' not in api_key:
-        return api_key
-
-    # Fallback to config files
-    config_files = ['.env', 'config.env', 'config.example.env']
-    for config_file in config_files:
-        if os.path.exists(config_file):
-            try:
-                with open(config_file, 'r') as f:
-                    content = f.read()
-                    match = re.search(r'MISTRAL_API_KEY\s*=\s*([^\s#\n]+)', content)
-                    if match:
-                        key = match.group(1).strip().strip('"').strip("'")
-                        if key and 'your-' not in key:
-                            return key
-            except Exception:
-                pass
-    return None
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # IPC - Communication with Electron
@@ -215,87 +191,171 @@ IMPORTANT:
 # TEXT GENERATION (STREAMING)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def generate_streaming(prompt, context, client):
-    """Generate text with streaming output."""
+def _is_auth_error(error_str):
+    """Check if an error is an authentication/authorization failure."""
+    auth_signals = ['401', 'unauthorized', 'authentication', 'invalid x-api-key',
+                    'invalid api key', 'invalid api_key', 'forbidden', '403']
+    error_lower = error_str.lower()
+    return any(sig in error_lower for sig in auth_signals)
+
+
+def _is_rate_limit_error(error_str):
+    """Check if an error is a rate limit / quota exceeded failure."""
+    rate_signals = ['429', 'rate limit', 'ratelimit', 'rate_limit',
+                    'exceeded your current quota', 'quota exceeded',
+                    'too many requests', 'resource exhausted']
+    error_lower = error_str.lower()
+    return any(sig in error_lower for sig in rate_signals)
+
+
+def generate_streaming(prompt, context, provider_manager):
+    """Generate text with streaming output via LiteLLM."""
     messages = build_messages(prompt, context)
+
+    # Resolve which model to use
+    agent = context.get("agent", "auto") if context else "auto"
+    mode = context.get("mode", "prompt") if context else "prompt"
+    model = provider_manager.resolve_model(agent=agent, mode=mode, prompt=prompt)
+
+    if not model:
+        IPC.send_error("No LLM provider available. Add at least one API key in settings.")
+        IPC.send_chunk("", is_final=True)
+        return ""
+
+    # Determine model group for memory
+    group = provider_manager.get_model_group(model)
+
+    # Attach conversation memory (skipped for backtick/live modes)
+    window_title = context.get("window", "") if context else ""
+    memory_msgs = provider_manager.get_memory_history(window_title, group, mode)
+    messages = build_messages_with_memory(messages, memory_msgs)
+
     full_text = ""
+    retries = 0          # counts retryable errors (503/overloaded)
+    provider_switches = 0 # counts auth/rate-limit fallbacks (unlimited by MAX_RETRIES)
+    max_switches = 10     # safety cap to avoid infinite loops
 
-    for attempt in range(MAX_RETRIES):
+    while retries < MAX_RETRIES and provider_switches < max_switches:
         try:
-            stream = client.chat.stream(
-                model="mistral-small-latest",
-                messages=messages
-            )
-
-            for event in stream:
-                chunk = None
-                try:
-                    # Handle multiple SDK versions
-                    if hasattr(event, 'data') and hasattr(event.data, 'choices'):
-                        for choice in event.data.choices:
-                            if hasattr(choice, 'delta') and hasattr(choice.delta, 'content'):
-                                chunk = choice.delta.content
-                    elif hasattr(event, 'choices'):
-                        for choice in event.choices:
-                            if hasattr(choice, 'delta') and hasattr(choice.delta, 'content'):
-                                chunk = choice.delta.content
-                except Exception:
-                    pass
-
-                if chunk:
-                    full_text += chunk
-                    IPC.send_chunk(chunk, is_final=False)
+            for chunk in provider_manager.stream(model, messages):
+                full_text += chunk
+                IPC.send_chunk(chunk, is_final=False)
 
             # Clean and finalize
             full_text = clean_response(full_text)
             IPC.send_chunk("", is_final=True)
+
+            # Store interaction in memory
+            provider_manager.store_interaction(window_title, prompt, full_text, group, mode)
+
             return full_text
 
         except Exception as e:
             error_str = str(e)
 
-            if '503' in error_str or 'overloaded' in error_str.lower():
-                if attempt < MAX_RETRIES - 1:
-                    time.sleep(RETRY_DELAY * (attempt + 1))
+            # Auth error → mark model as failed and try fallback (doesn't count as retry)
+            if _is_auth_error(error_str):
+                fallback = provider_manager.get_fallback_model(model)
+                if fallback:
+                    IPC.send_error(f"Auth failed for {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
+                    model = fallback
+                    group = provider_manager.get_model_group(model)
+                    full_text = ""  # reset partial output
+                    provider_switches += 1
                     continue
+                else:
+                    IPC.send_error(f"Invalid API key for {model.split('/')[0]} and no fallback available.")
+                    IPC.send_chunk("", is_final=True)
+                    return "Error: Invalid API key and no fallback available."
+
+            if '503' in error_str or 'overloaded' in error_str.lower():
+                retries += 1
+                if retries < MAX_RETRIES:
+                    time.sleep(RETRY_DELAY * retries)
+                    continue
+                IPC.send_error(f"API overloaded. Tried {MAX_RETRIES} times.")
+                IPC.send_chunk("", is_final=True)
                 return f"Error: API overloaded. Tried {MAX_RETRIES} times."
 
-            if '429' in error_str or 'rate limit' in error_str.lower():
+            if _is_rate_limit_error(error_str):
+                # Rate limited / quota exceeded → try fallback to a different provider
+                fallback = provider_manager.get_fallback_model(model)
+                if fallback:
+                    IPC.send_error(f"Rate limited on {model.split('/')[0]}, switching to {fallback.split('/')[0]}...")
+                    model = fallback
+                    group = provider_manager.get_model_group(model)
+                    full_text = ""
+                    provider_switches += 1
+                    continue
+                IPC.send_error("API rate limit exceeded on all providers.")
+                IPC.send_chunk("", is_final=True)
                 return "Error: API rate limit exceeded."
 
-            if '401' in error_str or 'unauthorized' in error_str.lower():
-                return "Error: Invalid API key."
-
+            IPC.send_error(f"Generation error: {error_str}")
+            IPC.send_chunk("", is_final=True)
             return f"Error: {error_str}"
 
+    IPC.send_error("Failed after multiple attempts.")
+    IPC.send_chunk("", is_final=True)
     return "Error: Failed after multiple attempts."
 
 
-def generate_non_streaming(prompt, context, client):
+def generate_non_streaming(prompt, context, provider_manager):
     """Generate text without streaming (fallback)."""
     messages = build_messages(prompt, context)
 
-    for attempt in range(MAX_RETRIES):
+    agent = context.get("agent", "auto") if context else "auto"
+    mode = context.get("mode", "prompt") if context else "prompt"
+    model = provider_manager.resolve_model(agent=agent, mode=mode, prompt=prompt)
+
+    if not model:
+        return "Error: No LLM provider available."
+
+    group = provider_manager.get_model_group(model)
+    window_title = context.get("window", "") if context else ""
+    memory_msgs = provider_manager.get_memory_history(window_title, group, mode)
+    messages = build_messages_with_memory(messages, memory_msgs)
+
+    retries = 0
+    provider_switches = 0
+    max_switches = 10
+
+    while retries < MAX_RETRIES and provider_switches < max_switches:
         try:
-            response = client.chat.complete(
-                model="mistral-small-latest",
-                messages=messages
-            )
-
-            if hasattr(response, 'choices') and response.choices:
-                if hasattr(response.choices[0], 'message'):
-                    if hasattr(response.choices[0].message, 'content'):
-                        text = response.choices[0].message.content
-                        return clean_response(text)
-
+            text = provider_manager.complete(model, messages)
+            if text:
+                text = clean_response(text)
+                provider_manager.store_interaction(window_title, prompt, text, group, mode)
+                return text
             return "Error: No content in response."
 
         except Exception as e:
             error_str = str(e)
-            if '503' in error_str or 'overloaded' in error_str.lower():
-                if attempt < MAX_RETRIES - 1:
-                    time.sleep(RETRY_DELAY * (attempt + 1))
+
+            # Auth error → fallback to next provider (doesn't count as retry)
+            if _is_auth_error(error_str):
+                fallback = provider_manager.get_fallback_model(model)
+                if fallback:
+                    model = fallback
+                    group = provider_manager.get_model_group(model)
+                    provider_switches += 1
                     continue
+                return "Error: Invalid API key and no fallback available."
+
+            if '503' in error_str or 'overloaded' in error_str.lower():
+                retries += 1
+                if retries < MAX_RETRIES:
+                    time.sleep(RETRY_DELAY * retries)
+                    continue
+
+            if _is_rate_limit_error(error_str):
+                fallback = provider_manager.get_fallback_model(model)
+                if fallback:
+                    model = fallback
+                    group = provider_manager.get_model_group(model)
+                    provider_switches += 1
+                    continue
+
             return f"Error: {error_str}"
 
     return "Error: Failed after multiple attempts."
@@ -327,7 +387,7 @@ def clean_response(text):
 # REQUEST HANDLER
 # ══════════════════════════════════════════════════════════════════════════════
 
-def handle_request(request, client):
+def handle_request(request, provider_manager):
     """Handle incoming request from Electron."""
     cmd = request.get("cmd", "")
 
@@ -341,9 +401,9 @@ def handle_request(request, client):
             return
 
         if streaming:
-            generate_streaming(prompt, context, client)
+            generate_streaming(prompt, context, provider_manager)
         else:
-            text = generate_non_streaming(prompt, context, client)
+            text = generate_non_streaming(prompt, context, provider_manager)
             IPC.send_complete(text)
 
     elif cmd == "ping":
@@ -352,6 +412,18 @@ def handle_request(request, client):
     elif cmd == "shutdown":
         IPC.send({"event": "shutdown_ack"})
         return "shutdown"
+
+    elif cmd == "get_agents":
+        agents = provider_manager.get_available_agents()
+        IPC.send({"event": "agents", "agents": agents})
+
+    elif cmd == "test_provider":
+        model = request.get("model", "")
+        if model:
+            result = provider_manager.test_provider(model)
+            IPC.send({"event": "test_result", "model": model, **result})
+        else:
+            IPC.send_error("test_provider requires a model parameter")
 
     else:
         IPC.send_error(f"Unknown command: {cmd}")
@@ -363,19 +435,20 @@ def handle_request(request, client):
 
 def main():
     """Main entry point - persistent service."""
-    api_key = load_api_key()
-    if not api_key:
-        IPC.send_error("Missing API key! Set MISTRAL_API_KEY in .env file.")
+    try:
+        provider_manager = ProviderManager()
+    except Exception as e:
+        IPC.send_error(f"Failed to initialize provider system: {e}")
         IPC.send({"event": "started", "success": False})
         return
 
-    try:
-        client = Mistral(api_key=api_key)
-        IPC.send({"event": "started", "success": True, "pid": os.getpid()})
-    except Exception as e:
-        IPC.send_error(f"Failed to initialize Mistral client: {e}")
-        IPC.send({"event": "started", "success": False})
-        return
+    if not provider_manager.has_any_provider():
+        IPC.send_error("No API keys configured. Add at least one provider key.")
+        # Still start — user may add keys via settings later
+        IPC.send({"event": "started", "success": True, "pid": os.getpid(), "providers": 0})
+    else:
+        agents = provider_manager.get_available_agents()
+        IPC.send({"event": "started", "success": True, "pid": os.getpid(), "providers": len(agents) - 1})
 
     running = True
     while running:
@@ -390,7 +463,7 @@ def main():
 
             try:
                 request = json.loads(line)
-                result = handle_request(request, client)
+                result = handle_request(request, provider_manager)
                 if result == "shutdown":
                     running = False
             except json.JSONDecodeError:

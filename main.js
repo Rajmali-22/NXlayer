@@ -3,6 +3,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const readline = require('readline');
 const os = require('os');
+const keystore = require(path.join(__dirname, 'src', 'main', 'keystore.js'));
 
 // Use python3 on macOS/Linux, python on Windows (production-friendly)
 function getPythonCommand() {
@@ -55,6 +56,8 @@ let keystrokeMonitorRL = null;
 let pendingBackspaceCount = 0;  // Number of backspaces to send before injecting
 let triggerMode = null;  // 'backtick', 'extension', 'clipboard', or 'prompt'
 let humanizeTyping = false;  // Whether to use human-like typing
+let currentAgent = 'auto';  // Selected LLM agent (model string or 'auto')
+let lastWindowTitle = '';  // Last active window title for per-window memory
 
 // AI Backend service state (persistent process)
 let aiBackend = null;
@@ -121,6 +124,14 @@ function loadCachedConfig() {
   const fs = require('fs');
   cachedEnv = { ...process.env };
 
+  // All supported provider env vars
+  const providerEnvVars = [
+    'MISTRAL_API_KEY', 'GROQ_API_KEY', 'DEEPSEEK_API_KEY',
+    'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY',
+    'XAI_API_KEY', 'TOGETHERAI_API_KEY', 'PERPLEXITYAI_API_KEY',
+    'COHERE_API_KEY', 'REPLICATE_API_TOKEN', 'GOOGLE_API_KEY'
+  ];
+
   const configFiles = ['.env', 'config.example.env', 'config.env'];
   for (const configFile of configFiles) {
     const configPath = path.join(__dirname, configFile);
@@ -128,30 +139,15 @@ function loadCachedConfig() {
       try {
         const configContent = fs.readFileSync(configPath, 'utf8');
 
-        // Mistral API key
-        const mistralKeyMatch = configContent.match(/MISTRAL_API_KEY\s*=\s*([^\s#\n]+)/);
-        if (mistralKeyMatch) {
-          const apiKey = mistralKeyMatch[1].trim().replace(/^["']|["']$/g, '');
-          if (apiKey && !apiKey.includes('your-')) {
-            cachedEnv.MISTRAL_API_KEY = apiKey;
-          }
-        }
-
-        // Replicate API key
-        const replicateMatch = configContent.match(/REPLICATE_API_TOKEN\s*=\s*([^\s#\n]+)/);
-        if (replicateMatch) {
-          const apiKey = replicateMatch[1].trim().replace(/^["']|["']$/g, '');
-          if (apiKey && !apiKey.includes('your-')) {
-            cachedEnv.REPLICATE_API_TOKEN = apiKey;
-          }
-        }
-
-        // Google API key (fallback)
-        const googleKeyMatch = configContent.match(/GOOGLE_API_KEY\s*=\s*([^\s#\n]+)/);
-        if (googleKeyMatch) {
-          const apiKey = googleKeyMatch[1].trim().replace(/^["']|["']$/g, '');
-          if (apiKey && !apiKey.includes('your-')) {
-            cachedEnv.GOOGLE_API_KEY = apiKey;
+        // Load all provider API keys from config file
+        for (const envVar of providerEnvVars) {
+          const regex = new RegExp(envVar + '\\s*=\\s*([^\\s#\\n]+)');
+          const match = configContent.match(regex);
+          if (match) {
+            const apiKey = match[1].trim().replace(/^["']|["']$/g, '');
+            if (apiKey && !apiKey.includes('your-')) {
+              cachedEnv[envVar] = apiKey;
+            }
           }
         }
       } catch (err) {
@@ -160,13 +156,24 @@ function loadCachedConfig() {
     }
   }
 
-  console.log('Config loaded. Mistral key present:', !!cachedEnv.MISTRAL_API_KEY);
+  // Overlay encrypted keys from keystore (takes priority over .env)
+  try {
+    const encryptedKeys = keystore.getAllApiKeys();
+    for (const [envVar, key] of Object.entries(encryptedKeys)) {
+      if (key && !key.includes('your-')) {
+        cachedEnv[envVar] = key;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to load encrypted keys:', err.message);
+  }
 
-  // Optional: validate required keys (log only; app still starts)
-  const required = { MISTRAL_API_KEY: 'text/grammar AI' };
-  const missing = Object.entries(required).filter(([key]) => !(cachedEnv[key] && cachedEnv[key].trim() && !cachedEnv[key].includes('your-')));
-  if (missing.length) {
-    console.warn('Missing or placeholder config:', missing.map(([k]) => k).join(', '), '- copy config.example.env to .env and set keys.');
+  // Log which providers are configured
+  const configured = providerEnvVars.filter(k => cachedEnv[k] && !cachedEnv[k].includes('your-'));
+  console.log('Config loaded. Providers configured:', configured.length > 0 ? configured.join(', ') : 'none');
+
+  if (configured.length === 0) {
+    console.warn('No LLM provider keys found. Copy config.example.env to .env and set at least one API key.');
   }
 }
 
@@ -306,9 +313,9 @@ function createSettingsWindow() {
   const display = screen.getDisplayNearestPoint(cursor);
   const workArea = display.workArea;
 
-  // Clean settings panel - no nav bar
+  // Clean settings panel - expanded for provider management
   const windowWidth = 380;
-  const windowHeight = 580;
+  const windowHeight = 780;
 
   // Position near center-top of screen
   const x = Math.round(workArea.x + (workArea.width - windowWidth) / 2);
@@ -508,6 +515,23 @@ function handleAIBackendEvent(event) {
     console.log('AI backend started, success:', event.success, 'PID:', event.pid);
     aiBackendReady = event.success;
 
+    // Once backend is ready, fetch agents and push to renderer for dropdown
+    if (aiBackendReady) {
+      const agentTimeout = setTimeout(() => {
+        delete pendingBackendCallbacks['agents_startup'];
+      }, 5000);
+
+      pendingBackendCallbacks['agents_startup'] = (evt) => {
+        clearTimeout(agentTimeout);
+        const agents = evt.agents || [];
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('agents-updated', agents);
+        }
+      };
+
+      sendToAIBackend({ cmd: 'get_agents' });
+    }
+
   } else if (event.event === 'chunk') {
     // Streaming chunk received
     if (pendingAIRequest && pendingAIRequest.streaming) {
@@ -554,6 +578,25 @@ function handleAIBackendEvent(event) {
   } else if (event.event === 'pong') {
     console.log('AI backend pong received');
 
+  } else if (event.event === 'agents') {
+    // Response to get_agents command — may be from IPC handler or startup push
+    if (pendingBackendCallbacks && pendingBackendCallbacks['agents']) {
+      pendingBackendCallbacks['agents'](event);
+      delete pendingBackendCallbacks['agents'];
+    }
+    if (pendingBackendCallbacks && pendingBackendCallbacks['agents_startup']) {
+      pendingBackendCallbacks['agents_startup'](event);
+      delete pendingBackendCallbacks['agents_startup'];
+    }
+
+  } else if (event.event === 'test_result') {
+    // Response to test_provider command
+    const callbackKey = 'test_result_' + event.model;
+    if (pendingBackendCallbacks && pendingBackendCallbacks[callbackKey]) {
+      pendingBackendCallbacks[callbackKey](event);
+      delete pendingBackendCallbacks[callbackKey];
+    }
+
   } else if (event.event === 'stopped') {
     console.log('AI backend stopped');
   }
@@ -579,7 +622,7 @@ async function generateTextStreaming(mode, buffer, extraParam = null, autoInject
     }
 
     // Build context
-    const context = { mode: mode };
+    const context = { mode: mode, agent: currentAgent, window: lastWindowTitle };
     if (mode === 'extension' && extraParam) {
       context.last_output = extraParam;
     } else if (mode === 'clipboard_with_instruction' && extraParam) {
@@ -717,9 +760,12 @@ async function handleKeystrokeEvent(event) {
     }
 
   } else if (event.event === 'window_change') {
-    // Window changed - reset state
+    // Window changed - reset state and track title for per-window memory
     pendingBackspaceCount = 0;
     triggerMode = null;
+    if (event.title) {
+      lastWindowTitle = event.title;
+    }
 
   } else if (event.event === 'buffer') {
     // Response to get_buffer request
@@ -1689,6 +1735,96 @@ ipcMain.on('settings-coding-mode-toggle', (event, enabled) => {
 ipcMain.on('settings-ultra-human-toggle', (event, enabled) => {
   ultraHumanEnabled = enabled;
   console.log('Ultra Human typing enabled:', ultraHumanEnabled);
+});
+
+// IPC handler for agent selection change
+ipcMain.on('settings-agent-change', (event, agent) => {
+  currentAgent = agent || 'auto';
+  console.log('Agent changed to:', currentAgent);
+});
+
+// Pending one-shot requests to AI backend (agents list, test results)
+let pendingBackendCallbacks = {};
+
+// IPC handler to save an API key (encrypted via keystore)
+ipcMain.handle('save-api-key', async (event, provider, key) => {
+  try {
+    if (!key || key.trim() === '') {
+      keystore.removeApiKey(provider);
+      // Remove from cached env
+      delete cachedEnv[provider];
+      return { success: true, action: 'removed' };
+    }
+    keystore.saveApiKey(provider, key.trim());
+    // Update cached env so it takes effect immediately
+    cachedEnv[provider] = key.trim();
+    return { success: true, action: 'saved' };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+// IPC handler to get configured providers status
+ipcMain.handle('get-providers', async () => {
+  const providerEnvVars = [
+    'MISTRAL_API_KEY', 'GROQ_API_KEY', 'DEEPSEEK_API_KEY',
+    'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY',
+    'XAI_API_KEY', 'TOGETHERAI_API_KEY', 'PERPLEXITYAI_API_KEY',
+    'COHERE_API_KEY', 'REPLICATE_API_TOKEN'
+  ];
+
+  const providers = providerEnvVars.map(envVar => ({
+    envVar,
+    configured: !!(cachedEnv[envVar] && !cachedEnv[envVar].includes('your-')),
+    hasKey: !!cachedEnv[envVar],
+  }));
+
+  return providers;
+});
+
+// IPC handler to get available agents from AI backend
+ipcMain.handle('get-agents', async () => {
+  return new Promise((resolve) => {
+    if (!aiBackendReady) {
+      resolve([{ value: 'auto', label: 'Auto', group: 'auto' }]);
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      delete pendingBackendCallbacks['agents'];
+      resolve([{ value: 'auto', label: 'Auto', group: 'auto' }]);
+    }, 3000);
+
+    pendingBackendCallbacks['agents'] = (evt) => {
+      clearTimeout(timeout);
+      resolve(evt.agents || []);
+    };
+
+    sendToAIBackend({ cmd: 'get_agents' });
+  });
+});
+
+// IPC handler for testing a provider from settings
+ipcMain.handle('test-provider', async (event, model) => {
+  return new Promise((resolve) => {
+    if (!aiBackendReady) {
+      resolve({ success: false, message: 'AI backend not ready' });
+      return;
+    }
+
+    const callbackKey = 'test_result_' + model;
+    const timeout = setTimeout(() => {
+      delete pendingBackendCallbacks[callbackKey];
+      resolve({ success: false, message: 'Test timed out' });
+    }, 15000);
+
+    pendingBackendCallbacks[callbackKey] = (evt) => {
+      clearTimeout(timeout);
+      resolve({ success: evt.success, message: evt.message });
+    };
+
+    sendToAIBackend({ cmd: 'test_provider', model: model });
+  });
 });
 
 // IPC handler for auto-inject (autonomous mode - no suggestion popup)

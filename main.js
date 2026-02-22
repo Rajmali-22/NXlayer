@@ -62,7 +62,8 @@ let keystrokeMonitorRL = null;
 let pendingBackspaceCount = 0;  // Number of backspaces to send before injecting
 let triggerMode = null;  // 'backtick', 'extension', 'clipboard', or 'prompt'
 let humanizeTyping = false;  // Whether to use human-like typing
-let currentAgent = 'auto';  // Selected LLM agent (model string or 'auto')
+let currentAgent = 'auto';  // Selected LLM agent (model string or 'auto') for prompt bar
+let chatAgent = 'auto';     // Selected LLM agent for chat window (independent)
 let lastWindowTitle = '';  // Last active window title for per-window memory
 
 // AI Backend service state (persistent process)
@@ -530,7 +531,7 @@ function generateChatStreaming(conversationId, userMessage, apiMessages) {
     cmd: 'generate',
     prompt: userMessage,
     messages: apiMessages,
-    context: { mode: 'chat', agent: currentAgent, window: 'chat' },
+    context: { mode: 'chat', agent: chatAgent, window: 'chat' },
     streaming: true
   });
 
@@ -727,6 +728,9 @@ function handleAIBackendEvent(event) {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('agents-updated', agents);
         }
+        if (chatWindow && !chatWindow.isDestroyed()) {
+          chatWindow.webContents.send('agents-updated', agents);
+        }
       };
 
       sendToAIBackend({ cmd: 'get_agents' });
@@ -750,7 +754,7 @@ function handleAIBackendEvent(event) {
           role: 'assistant',
           content: fullText,
           timestamp: Date.now(),
-          model: currentAgent
+          model: chatAgent
         };
         saveChatMessage(convId, assistantMsg);
         if (chatWindow && !chatWindow.isDestroyed()) {
@@ -2416,7 +2420,12 @@ ipcMain.handle('chat-export-markdown', async (event, id) => {
 });
 
 ipcMain.handle('chat-get-current-model', async () => {
-  return { agent: currentAgent };
+  return { agent: chatAgent };
+});
+
+ipcMain.on('chat-agent-change', (event, agent) => {
+  chatAgent = agent || 'auto';
+  console.log('Chat agent changed to:', chatAgent);
 });
 
 ipcMain.on('chat-send-message', (event, conversationId, userMessage) => {

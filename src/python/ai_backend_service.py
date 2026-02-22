@@ -191,7 +191,8 @@ IMPORTANT:
 def _is_auth_error(error_str):
     """Check if an error is an authentication/authorization failure."""
     auth_signals = ['401', 'unauthorized', 'authentication', 'invalid x-api-key',
-                    'invalid api key', 'invalid api_key', 'forbidden', '403']
+                    'invalid api key', 'invalid api_key', 'incorrect api key',
+                    'invalid argument', 'forbidden', '403']
     error_lower = error_str.lower()
     return any(sig in error_lower for sig in auth_signals)
 
@@ -385,7 +386,8 @@ def clean_response(text):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def generate_streaming_with_messages(messages, context, provider_manager):
-    """Generate streaming response using pre-built messages (for chat mode)."""
+    """Generate streaming response using pre-built messages (for chat mode).
+    Also integrates cross-model memory so chat can see prompt bar interactions."""
     agent = context.get("agent", "auto") if context else "auto"
     mode = context.get("mode", "chat") if context else "chat"
     prompt = ""
@@ -402,6 +404,13 @@ def generate_streaming_with_messages(messages, context, provider_manager):
         IPC.send_chunk("", is_final=True)
         return ""
 
+    # Attach cross-model memory (global pool from prompt bar / other windows)
+    group = provider_manager.get_model_group(model)
+    window_title = context.get("window", "") if context else ""
+    memory_msgs = provider_manager.get_memory_history(window_title, group, mode)
+    if memory_msgs:
+        messages = build_messages_with_memory(messages, memory_msgs)
+
     full_text = ""
     retries = 0
     provider_switches = 0
@@ -415,6 +424,10 @@ def generate_streaming_with_messages(messages, context, provider_manager):
 
             full_text = clean_response(full_text)
             IPC.send_chunk("", is_final=True)
+
+            # Store in cross-model memory so prompt bar can see chat interactions
+            provider_manager.store_interaction(window_title, prompt, full_text, group, mode)
+
             return full_text
 
         except Exception as e:

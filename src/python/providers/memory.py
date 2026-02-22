@@ -26,6 +26,7 @@ except ImportError:
 MAX_HISTORY_PER_SESSION = 10   # keep last N exchanges (user + assistant pairs)
 SESSION_MAX_AGE_DAYS = 7
 SESSIONS_DIR = os.path.join("data", "memory", "sessions")
+GLOBAL_SESSION_KEY = "_global"  # shared memory pool across all windows/models
 
 # Modes that are too short-lived for conversation memory
 SKIP_MEMORY_MODES = {"backtick", "live"}
@@ -109,40 +110,68 @@ class MemoryManager:
 
     def store_interaction(self, window_title, user_prompt, assistant_response, group="powerful", mode="prompt"):
         """
-        Store a user/assistant exchange in the window's session.
+        Store a user/assistant exchange in the window's session AND the global
+        shared session so all windows/models can access cross-model memory.
         Skips storage for short-lived modes (backtick, live).
         """
         if mode in SKIP_MEMORY_MODES:
             return
 
         key = _normalize_window_title(window_title)
+        now = time.time()
+        user_entry = {"role": "user", "content": user_prompt, "ts": now}
+        assistant_entry = {"role": "assistant", "content": assistant_response, "ts": now + 0.001}
+        max_msgs = MAX_HISTORY_PER_SESSION * 2
+
+        # Store in window-specific session
         if key not in self.sessions:
             self.sessions[key] = []
-
-        now = time.time()
-        self.sessions[key].append({"role": "user", "content": user_prompt, "ts": now})
-        self.sessions[key].append({"role": "assistant", "content": assistant_response, "ts": now})
-
-        # Trim to MAX_HISTORY_PER_SESSION pairs (each pair = 2 messages)
-        max_msgs = MAX_HISTORY_PER_SESSION * 2
+        self.sessions[key].append(user_entry)
+        self.sessions[key].append(assistant_entry)
         if len(self.sessions[key]) > max_msgs:
             self.sessions[key] = self.sessions[key][-max_msgs:]
-
         self._save_session(key)
+
+        # Also store in global shared session (skip if already global)
+        if key != GLOBAL_SESSION_KEY:
+            if GLOBAL_SESSION_KEY not in self.sessions:
+                self.sessions[GLOBAL_SESSION_KEY] = []
+            self.sessions[GLOBAL_SESSION_KEY].append(user_entry)
+            self.sessions[GLOBAL_SESSION_KEY].append(assistant_entry)
+            if len(self.sessions[GLOBAL_SESSION_KEY]) > max_msgs:
+                self.sessions[GLOBAL_SESSION_KEY] = self.sessions[GLOBAL_SESSION_KEY][-max_msgs:]
+            self._save_session(GLOBAL_SESSION_KEY)
 
     def get_history(self, window_title, group="powerful", mode="prompt"):
         """
-        Get conversation history for a window as a list of {role, content} dicts.
-        Returns empty list for short-lived modes or unknown windows.
+        Get conversation history for a window merged with the global shared pool.
+        Deduplicates by timestamp so cross-model interactions are visible everywhere.
+        Returns empty list for short-lived modes.
         """
         if mode in SKIP_MEMORY_MODES:
             return []
 
         key = _normalize_window_title(window_title)
-        messages = self.sessions.get(key, [])
+        window_msgs = self.sessions.get(key, [])
+        global_msgs = self.sessions.get(GLOBAL_SESSION_KEY, []) if key != GLOBAL_SESSION_KEY else []
+
+        # Merge and deduplicate by (timestamp, role) so paired user+assistant are both kept
+        seen = set()
+        merged = []
+        for m in window_msgs + global_msgs:
+            key_tuple = (m.get("ts", 0), m.get("role", ""))
+            if key_tuple not in seen:
+                seen.add(key_tuple)
+                merged.append(m)
+
+        # Sort by timestamp and trim
+        merged.sort(key=lambda m: m.get("ts", 0))
+        max_msgs = MAX_HISTORY_PER_SESSION * 2
+        if len(merged) > max_msgs:
+            merged = merged[-max_msgs:]
 
         # Strip timestamps for the API messages
-        return [{"role": m["role"], "content": m["content"]} for m in messages]
+        return [{"role": m["role"], "content": m["content"]} for m in merged]
 
     def clear_session(self, window_title):
         """Clear a specific window's session."""

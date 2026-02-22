@@ -13,7 +13,10 @@ let searchTimer = null;
 
 // ── DOM refs ──
 let sidebarList, messagesContainer, chatInput, sendBtn, searchInput;
-let modelNameEl, emptyState, exportBtn;
+let chatAgentSelect, emptyState, exportBtn, chatMicBtn;
+
+// Voice recording state
+let isChatRecording = false;
 
 // ── Marked config ──
 const renderer = new Renderer();
@@ -43,13 +46,31 @@ document.addEventListener('DOMContentLoaded', async () => {
   chatInput = document.getElementById('chat-input');
   sendBtn = document.getElementById('send-btn');
   searchInput = document.getElementById('search-input');
-  modelNameEl = document.getElementById('model-name');
+  chatAgentSelect = document.getElementById('chat-agent-select');
   emptyState = document.getElementById('empty-state');
   exportBtn = document.getElementById('export-btn');
+  chatMicBtn = document.getElementById('chat-mic-btn');
 
-  // Load model name
-  const modelInfo = await ipcRenderer.invoke('chat-get-current-model');
-  modelNameEl.textContent = modelInfo.agent || 'auto';
+  // Populate agent selector from backend
+  await populateChatAgentSelector();
+
+  // Restore saved chat agent from localStorage
+  try {
+    const savedAgent = localStorage.getItem('chat-agent');
+    if (savedAgent && chatAgentSelect) {
+      chatAgentSelect.value = savedAgent;
+    }
+  } catch (e) {}
+
+  // Agent selector change handler
+  if (chatAgentSelect) {
+    chatAgentSelect.addEventListener('change', () => {
+      try {
+        localStorage.setItem('chat-agent', chatAgentSelect.value);
+      } catch (e) {}
+      ipcRenderer.send('chat-agent-change', chatAgentSelect.value);
+    });
+  }
 
   // Load conversations
   await loadConversationList();
@@ -86,12 +107,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // Voice input mic button
+  if (chatMicBtn) {
+    chatMicBtn.addEventListener('click', startChatRecording);
+  }
+
   // IPC listeners for streaming
   ipcRenderer.on('chat-stream-start', onStreamStart);
   ipcRenderer.on('chat-stream-chunk', (e, chunk) => onStreamChunk(chunk));
   ipcRenderer.on('chat-stream-end', (e, data) => onStreamEnd(data));
   ipcRenderer.on('chat-stream-error', (e, error) => onStreamError(error));
   ipcRenderer.on('chat-title-updated', (e, data) => onTitleUpdated(data));
+
+  // Re-populate agent dropdown when backend pushes updated list
+  ipcRenderer.on('agents-updated', (event, agents) => {
+    if (agents && agents.length > 0 && chatAgentSelect) {
+      populateChatAgentSelectorWithData(agents);
+    }
+  });
 });
 
 
@@ -172,10 +205,6 @@ async function loadConversation(id) {
   currentConversationId = id;
   renderMessages(conv.messages);
   renderSidebar(conversations); // update active state
-
-  // Update model display
-  const modelInfo = await ipcRenderer.invoke('chat-get-current-model');
-  modelNameEl.textContent = modelInfo.agent || 'auto';
 }
 
 function renderMessages(messages) {
@@ -488,6 +517,95 @@ function autoResizeTextarea() {
   chatInput.style.height = 'auto';
   chatInput.style.height = Math.min(chatInput.scrollHeight, 150) + 'px';
 }
+
+// ── Agent Selector ──
+
+function populateChatAgentSelectorWithData(agents) {
+  if (!agents || !chatAgentSelect) return;
+
+  chatAgentSelect.innerHTML = '';
+
+  const groups = { auto: [], fast: [], powerful: [], reasoning: [] };
+  for (const a of agents) {
+    const g = a.group || 'powerful';
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(a);
+  }
+
+  for (const a of (groups.auto || [])) {
+    const opt = document.createElement('option');
+    opt.value = a.value;
+    opt.textContent = a.label;
+    chatAgentSelect.appendChild(opt);
+  }
+
+  const groupLabels = { fast: 'Fast', powerful: 'Powerful', reasoning: 'Reasoning' };
+  for (const gName of ['fast', 'powerful', 'reasoning']) {
+    const items = groups[gName] || [];
+    if (items.length === 0) continue;
+    const optgroup = document.createElement('optgroup');
+    optgroup.label = groupLabels[gName];
+    for (const a of items) {
+      const opt = document.createElement('option');
+      opt.value = a.value;
+      opt.textContent = a.label;
+      optgroup.appendChild(opt);
+    }
+    chatAgentSelect.appendChild(optgroup);
+  }
+
+  const savedAgent = localStorage.getItem('chat-agent');
+  if (savedAgent) {
+    chatAgentSelect.value = savedAgent;
+  }
+}
+
+async function populateChatAgentSelector() {
+  try {
+    const agents = await ipcRenderer.invoke('get-agents');
+    populateChatAgentSelectorWithData(agents);
+  } catch (e) {
+    console.error('Failed to populate chat agent selector:', e);
+  }
+}
+
+
+// ── Voice Input ──
+
+async function startChatRecording() {
+  if (isChatRecording || isStreaming) return;
+
+  isChatRecording = true;
+  chatMicBtn.classList.add('recording');
+  chatMicBtn.disabled = true;
+
+  try {
+    const result = await ipcRenderer.invoke('transcribe-audio', {
+      timeout: 30,
+      phraseTimeout: 20
+    });
+
+    if (result.error) {
+      console.error('Voice input error:', result.error);
+    } else if (result.text) {
+      const currentText = chatInput.value.trim();
+      if (currentText) {
+        chatInput.value = currentText + ' ' + result.text;
+      } else {
+        chatInput.value = result.text;
+      }
+      chatInput.focus();
+      autoResizeTextarea();
+    }
+  } catch (error) {
+    console.error('Voice input failed:', error.message);
+  } finally {
+    isChatRecording = false;
+    chatMicBtn.classList.remove('recording');
+    chatMicBtn.disabled = false;
+  }
+}
+
 
 function copyCodeBlock(btn) {
   const wrapper = btn.closest('.code-block-wrapper');

@@ -384,6 +384,83 @@ def clean_response(text):
 # REQUEST HANDLER
 # ══════════════════════════════════════════════════════════════════════════════
 
+def generate_streaming_with_messages(messages, context, provider_manager):
+    """Generate streaming response using pre-built messages (for chat mode)."""
+    agent = context.get("agent", "auto") if context else "auto"
+    mode = context.get("mode", "chat") if context else "chat"
+    prompt = ""
+    # Extract last user message for model routing
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            prompt = msg.get("content", "")
+            break
+
+    model = provider_manager.resolve_model(agent=agent, mode=mode, prompt=prompt)
+
+    if not model:
+        IPC.send_error("No LLM provider available. Add at least one API key in settings.")
+        IPC.send_chunk("", is_final=True)
+        return ""
+
+    full_text = ""
+    retries = 0
+    provider_switches = 0
+    max_switches = 10
+
+    while retries < MAX_RETRIES and provider_switches < max_switches:
+        try:
+            for chunk in provider_manager.stream(model, messages):
+                full_text += chunk
+                IPC.send_chunk(chunk, is_final=False)
+
+            full_text = clean_response(full_text)
+            IPC.send_chunk("", is_final=True)
+            return full_text
+
+        except Exception as e:
+            error_str = str(e)
+
+            if _is_auth_error(error_str):
+                fallback = provider_manager.get_fallback_model(model)
+                if fallback:
+                    model = fallback
+                    full_text = ""
+                    provider_switches += 1
+                    continue
+                else:
+                    IPC.send_error(f"Invalid API key for {model.split('/')[0]} and no fallback available.")
+                    IPC.send_chunk("", is_final=True)
+                    return ""
+
+            if '503' in error_str or 'overloaded' in error_str.lower():
+                retries += 1
+                if retries < MAX_RETRIES:
+                    time.sleep(RETRY_DELAY * retries)
+                    continue
+                IPC.send_error(f"API overloaded. Tried {MAX_RETRIES} times.")
+                IPC.send_chunk("", is_final=True)
+                return ""
+
+            if _is_rate_limit_error(error_str):
+                fallback = provider_manager.get_fallback_model(model)
+                if fallback:
+                    model = fallback
+                    full_text = ""
+                    provider_switches += 1
+                    continue
+                IPC.send_error("API rate limit exceeded on all providers.")
+                IPC.send_chunk("", is_final=True)
+                return ""
+
+            IPC.send_error(f"Generation error: {error_str}")
+            IPC.send_chunk("", is_final=True)
+            return ""
+
+    IPC.send_error("Failed after multiple attempts.")
+    IPC.send_chunk("", is_final=True)
+    return ""
+
+
 def handle_request(request, provider_manager):
     """Handle incoming request from Electron."""
     cmd = request.get("cmd", "")
@@ -392,6 +469,16 @@ def handle_request(request, provider_manager):
         prompt = request.get("prompt", "")
         context = request.get("context", {})
         streaming = request.get("streaming", True)
+        pre_built_messages = request.get("messages")
+
+        # Chat mode: use pre-built messages (includes full conversation history)
+        if pre_built_messages:
+            if streaming:
+                generate_streaming_with_messages(pre_built_messages, context, provider_manager)
+            else:
+                # Non-streaming fallback for chat (unlikely path)
+                generate_streaming_with_messages(pre_built_messages, context, provider_manager)
+            return
 
         if not prompt:
             IPC.send({"event": "complete", "text": "", "error": "Empty prompt"})

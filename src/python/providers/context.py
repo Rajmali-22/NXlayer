@@ -20,6 +20,7 @@ MODE_TO_GROUP = {
     "clipboard_with_instruction": "powerful",
     "explanation":              "reasoning",
     "prompt":                   "powerful",
+    "chat":                     "powerful",
 }
 
 

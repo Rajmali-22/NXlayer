@@ -8,7 +8,8 @@ let settings = {
     liveModeEnabled: false,
     codingModeEnabled: false,
     ultraHumanEnabled: false,
-    darkMode: true
+    darkMode: true,
+    ghostModeEnabled: true  // default ON = hidden from screen share
 };
 
 // DOM Elements
@@ -19,6 +20,7 @@ let autoInjectToggle;
 let liveModeToggle;
 let codingModeToggle;
 let ultraHumanToggle;
+let ghostModeToggle;
 let closeBtn;
 
 // Initialize
@@ -30,10 +32,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     liveModeToggle = document.getElementById('live-mode-toggle');
     codingModeToggle = document.getElementById('coding-mode-toggle');
     ultraHumanToggle = document.getElementById('ultra-human-toggle');
+    ghostModeToggle = document.getElementById('ghost-mode-toggle');
     closeBtn = document.getElementById('close-btn');
 
     await loadSettings();
     setupEventListeners();
+    setupSidebarNavigation();
     updateUI();
     initProviderUI();
 });
@@ -89,6 +93,13 @@ function setupEventListeners() {
         ipcRenderer.send('settings-ultra-human-toggle', settings.ultraHumanEnabled);
     });
 
+    // Ghost mode toggle
+    ghostModeToggle.addEventListener('change', () => {
+        settings.ghostModeEnabled = ghostModeToggle.checked;
+        saveSettings();
+        ipcRenderer.send('settings-ghost-mode-toggle', settings.ghostModeEnabled);
+    });
+
     // Close button
     closeBtn.addEventListener('click', () => {
         ipcRenderer.send('close-settings-window');
@@ -123,6 +134,7 @@ async function loadSettings() {
             settings.liveModeEnabled = mainState.liveModeEnabled;
             settings.codingModeEnabled = mainState.codingModeEnabled;
             settings.ultraHumanEnabled = mainState.ultraHumanEnabled;
+            if (mainState.ghostModeEnabled !== undefined) settings.ghostModeEnabled = mainState.ghostModeEnabled;
         }
     } catch (e) {
         console.error('Failed to sync settings with main process:', e);
@@ -145,6 +157,7 @@ function updateUI() {
     liveModeToggle.checked = settings.liveModeEnabled;
     codingModeToggle.checked = settings.codingModeEnabled;
     ultraHumanToggle.checked = settings.ultraHumanEnabled;
+    ghostModeToggle.checked = settings.ghostModeEnabled;
     applyTheme();
     updateDisabledState();
 }
@@ -352,6 +365,40 @@ async function refreshProviderCards() {
     }
 }
 
+// Sidebar navigation setup
+function setupSidebarNavigation() {
+    const sidebarItems = document.querySelectorAll('.sidebar-item');
+    const sections = document.querySelectorAll('.section');
+
+    sidebarItems.forEach(item => {
+        item.addEventListener('click', () => {
+            // Remove active class from all items and sections
+            sidebarItems.forEach(i => i.classList.remove('active'));
+            sections.forEach(s => s.classList.remove('active-section'));
+
+            // Add active class to clicked item
+            item.classList.add('active');
+
+            // Show corresponding section
+            const sectionId = item.dataset.section + '-section';
+            const section = document.getElementById(sectionId);
+            if (section) {
+                section.classList.add('active-section');
+            }
+        });
+    });
+
+    // Set initial active section
+    const initialSection = document.querySelector('.sidebar-item.active');
+    if (initialSection) {
+        const sectionId = initialSection.dataset.section + '-section';
+        const section = document.getElementById(sectionId);
+        if (section) {
+            section.classList.add('active-section');
+        }
+    }
+}
+
 // Listen for settings sync from main process
 ipcRenderer.on('sync-settings', (event, newSettings) => {
     if (newSettings.masterEnabled !== undefined) {
@@ -372,8 +419,26 @@ ipcRenderer.on('sync-settings', (event, newSettings) => {
     if (newSettings.ultraHumanEnabled !== undefined) {
         settings.ultraHumanEnabled = newSettings.ultraHumanEnabled;
     }
+    if (newSettings.ghostModeEnabled !== undefined) {
+        settings.ghostModeEnabled = newSettings.ghostModeEnabled;
+    }
     if (newSettings.darkMode !== undefined) {
         settings.darkMode = newSettings.darkMode;
     }
     updateUI();
 });
+
+// Add cancel button functionality for API key input
+function setupCancelButton() {
+    const cancelBtn = document.getElementById('cancel-key-btn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+            document.getElementById('new-key-provider').value = '';
+            document.getElementById('new-key-input').value = '';
+            document.getElementById('key-status').textContent = '';
+        });
+    }
+}
+
+// Call this after DOM is loaded
+setTimeout(setupCancelButton, 100);

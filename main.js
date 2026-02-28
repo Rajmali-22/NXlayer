@@ -1,6 +1,7 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, clipboard } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, clipboard, dialog } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 const readline = require('readline');
 const os = require('os');
 const keystore = require(path.join(__dirname, 'src', 'main', 'keystore.js'));
@@ -48,7 +49,12 @@ try {
 let mainWindow = null;
 let outputWindow = null;
 let settingsWindow = null;
+let chatWindow = null;
 let isWindowVisible = false;
+
+// Chat streaming state (separate from prompt bar)
+let pendingChatRequest = null;  // { conversationId, resolve, reject, text }
+let chatStreamActive = false;
 
 // Keystroke monitor state
 let keystrokeMonitor = null;
@@ -56,7 +62,8 @@ let keystrokeMonitorRL = null;
 let pendingBackspaceCount = 0;  // Number of backspaces to send before injecting
 let triggerMode = null;  // 'backtick', 'extension', 'clipboard', or 'prompt'
 let humanizeTyping = false;  // Whether to use human-like typing
-let currentAgent = 'auto';  // Selected LLM agent (model string or 'auto')
+let currentAgent = 'auto';  // Selected LLM agent (model string or 'auto') for prompt bar
+let chatAgent = 'auto';     // Selected LLM agent for chat window (independent)
 let lastWindowTitle = '';  // Last active window title for per-window memory
 
 // AI Backend service state (persistent process)
@@ -121,7 +128,6 @@ let ultraHumanEnabled = false;
 
 // Load and cache environment/config once at startup
 function loadCachedConfig() {
-  const fs = require('fs');
   cachedEnv = { ...process.env };
 
   // All supported provider env vars
@@ -356,6 +362,201 @@ function createSettingsWindow() {
   });
 }
 
+// ============== Chat Persistence & Window ==============
+
+const CHATS_DIR = path.join(__dirname, 'data', 'chats');
+const CHATS_INDEX = path.join(CHATS_DIR, '_index.json');
+
+function ensureChatsDir() {
+  if (!fs.existsSync(CHATS_DIR)) {
+    fs.mkdirSync(CHATS_DIR, { recursive: true });
+  }
+}
+
+function generateId(prefix) {
+  const ts = Date.now();
+  const hex = Math.random().toString(16).substring(2, 6);
+  return `${prefix}_${ts}_${hex}`;
+}
+
+function loadConversation(id) {
+  const filePath = path.join(CHATS_DIR, `${id}.json`);
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (e) {
+    console.error('Failed to load conversation:', id, e.message);
+    return null;
+  }
+}
+
+function saveConversation(conv) {
+  ensureChatsDir();
+  const filePath = path.join(CHATS_DIR, `${conv.id}.json`);
+  fs.writeFileSync(filePath, JSON.stringify(conv, null, 2), 'utf8');
+  updateConversationIndex(conv);
+}
+
+function saveChatMessage(conversationId, msg) {
+  const conv = loadConversation(conversationId);
+  if (!conv) return null;
+  conv.messages.push(msg);
+  conv.updatedAt = Date.now();
+  saveConversation(conv);
+  return conv;
+}
+
+function loadConversationIndex() {
+  if (!fs.existsSync(CHATS_INDEX)) return [];
+  try {
+    return JSON.parse(fs.readFileSync(CHATS_INDEX, 'utf8'));
+  } catch (e) {
+    return [];
+  }
+}
+
+function updateConversationIndex(conv) {
+  const index = loadConversationIndex();
+  const existing = index.findIndex(e => e.id === conv.id);
+  const lastMsg = conv.messages[conv.messages.length - 1];
+  const entry = {
+    id: conv.id,
+    title: conv.title,
+    createdAt: conv.createdAt,
+    updatedAt: conv.updatedAt,
+    messageCount: conv.messages.length,
+    preview: lastMsg ? lastMsg.content.substring(0, 100) : ''
+  };
+  if (existing >= 0) {
+    index[existing] = entry;
+  } else {
+    index.push(entry);
+  }
+  fs.writeFileSync(CHATS_INDEX, JSON.stringify(index, null, 2), 'utf8');
+}
+
+function deleteConversationFromIndex(id) {
+  const index = loadConversationIndex().filter(e => e.id !== id);
+  fs.writeFileSync(CHATS_INDEX, JSON.stringify(index, null, 2), 'utf8');
+  const filePath = path.join(CHATS_DIR, `${id}.json`);
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+}
+
+function rebuildConversationIndex() {
+  ensureChatsDir();
+  const files = fs.readdirSync(CHATS_DIR).filter(f => f.endsWith('.json') && f !== '_index.json');
+  const index = [];
+  for (const file of files) {
+    try {
+      const conv = JSON.parse(fs.readFileSync(path.join(CHATS_DIR, file), 'utf8'));
+      const lastMsg = conv.messages && conv.messages[conv.messages.length - 1];
+      index.push({
+        id: conv.id,
+        title: conv.title || 'Untitled',
+        createdAt: conv.createdAt,
+        updatedAt: conv.updatedAt,
+        messageCount: conv.messages ? conv.messages.length : 0,
+        preview: lastMsg ? lastMsg.content.substring(0, 100) : ''
+      });
+    } catch (e) { /* skip corrupt files */ }
+  }
+  index.sort((a, b) => b.updatedAt - a.updatedAt);
+  fs.writeFileSync(CHATS_INDEX, JSON.stringify(index, null, 2), 'utf8');
+  return index;
+}
+
+function createChatWindow() {
+  if (chatWindow) {
+    chatWindow.focus();
+    return;
+  }
+
+  const { screen } = require('electron');
+  const cursor = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(cursor);
+  const workArea = display.workArea;
+
+  const windowWidth = 900;
+  const windowHeight = 650;
+  const x = Math.round(workArea.x + (workArea.width - windowWidth) / 2);
+  const y = Math.round(workArea.y + (workArea.height - windowHeight) / 2);
+
+  chatWindow = new BrowserWindow({
+    width: windowWidth,
+    height: windowHeight,
+    minWidth: 600,
+    minHeight: 400,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: true,
+    x: x,
+    y: y,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    }
+  });
+
+  chatWindow.loadFile(path.join('src', 'renderer', 'chat.html'));
+  setWindowExcludeFromCapture(chatWindow);
+
+  chatWindow.on('closed', () => {
+    chatWindow = null;
+    chatStreamActive = false;
+    pendingChatRequest = null;
+  });
+}
+
+function generateChatStreaming(conversationId, userMessage, apiMessages) {
+  if (!aiBackendReady) {
+    if (chatWindow && !chatWindow.isDestroyed()) {
+      chatWindow.webContents.send('chat-stream-error', 'AI backend not ready');
+    }
+    return;
+  }
+
+  chatStreamActive = true;
+  pendingChatRequest = {
+    conversationId,
+    text: ''
+  };
+
+  if (chatWindow && !chatWindow.isDestroyed()) {
+    chatWindow.webContents.send('chat-stream-start');
+  }
+
+  const sent = sendToAIBackend({
+    cmd: 'generate',
+    prompt: userMessage,
+    messages: apiMessages,
+    context: { mode: 'chat', agent: chatAgent, window: 'chat' },
+    streaming: true
+  });
+
+  if (!sent) {
+    chatStreamActive = false;
+    pendingChatRequest = null;
+    if (chatWindow && !chatWindow.isDestroyed()) {
+      chatWindow.webContents.send('chat-stream-error', 'Failed to send to AI backend');
+    }
+    return;
+  }
+
+  // 120s timeout for chat (longer than prompt bar's 60s)
+  setTimeout(() => {
+    if (chatStreamActive && pendingChatRequest && pendingChatRequest.conversationId === conversationId) {
+      const partialText = pendingChatRequest.text;
+      chatStreamActive = false;
+      pendingChatRequest = null;
+      if (chatWindow && !chatWindow.isDestroyed()) {
+        chatWindow.webContents.send('chat-stream-end', { text: partialText, timedOut: true });
+      }
+    }
+  }, 120000);
+}
+
 // ============== Keystroke Monitor ==============
 
 function startKeystrokeMonitor() {
@@ -527,14 +728,40 @@ function handleAIBackendEvent(event) {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('agents-updated', agents);
         }
+        if (chatWindow && !chatWindow.isDestroyed()) {
+          chatWindow.webContents.send('agents-updated', agents);
+        }
       };
 
       sendToAIBackend({ cmd: 'get_agents' });
     }
 
   } else if (event.event === 'chunk') {
-    // Streaming chunk received
-    if (pendingAIRequest && pendingAIRequest.streaming) {
+    // Streaming chunk received — route to chat or prompt bar
+    if (chatStreamActive && pendingChatRequest) {
+      pendingChatRequest.text += event.text;
+      if (chatWindow && !chatWindow.isDestroyed()) {
+        chatWindow.webContents.send('chat-stream-chunk', event.text);
+      }
+      if (event.final) {
+        const fullText = pendingChatRequest.text;
+        const convId = pendingChatRequest.conversationId;
+        chatStreamActive = false;
+        pendingChatRequest = null;
+        // Save assistant message to disk
+        const assistantMsg = {
+          id: generateId('msg'),
+          role: 'assistant',
+          content: fullText,
+          timestamp: Date.now(),
+          model: chatAgent
+        };
+        saveChatMessage(convId, assistantMsg);
+        if (chatWindow && !chatWindow.isDestroyed()) {
+          chatWindow.webContents.send('chat-stream-end', { text: fullText, messageId: assistantMsg.id });
+        }
+      }
+    } else if (pendingAIRequest && pendingAIRequest.streaming) {
       pendingAIRequest.text += event.text;
 
       // Send to output window for live display
@@ -570,7 +797,14 @@ function handleAIBackendEvent(event) {
 
   } else if (event.event === 'error') {
     console.error('AI backend error:', event.message);
-    if (pendingAIRequest && pendingAIRequest.reject) {
+    if (chatStreamActive && pendingChatRequest) {
+      // Route error to chat window
+      if (chatWindow && !chatWindow.isDestroyed()) {
+        chatWindow.webContents.send('chat-stream-error', event.message);
+      }
+      chatStreamActive = false;
+      pendingChatRequest = null;
+    } else if (pendingAIRequest && pendingAIRequest.reject) {
       pendingAIRequest.reject(new Error(event.message));
       pendingAIRequest = null;
     }
@@ -1157,6 +1391,10 @@ app.whenReady().then(() => {
   loadCachedConfig();
   loadSavedSettings();
 
+  // Ensure chat data directory exists and rebuild index
+  ensureChatsDir();
+  rebuildConversationIndex();
+
   createWindow();
   createOutputWindow();
   createExplanationWindow();
@@ -1218,6 +1456,19 @@ app.whenReady().then(() => {
 
   if (settingsShortcut) {
     console.log('Ctrl+Shift+S shortcut registered successfully');
+  }
+
+  // Register Ctrl+Shift+C for chat window
+  const chatShortcut = globalShortcut.register('CommandOrControl+Shift+C', () => {
+    if (chatWindow) {
+      chatWindow.close();
+    } else {
+      createChatWindow();
+    }
+  });
+
+  if (chatShortcut) {
+    console.log('Ctrl+Shift+C shortcut registered successfully');
   }
 
   // Register Ctrl+Shift+P to paste generated text using Python injection
@@ -2063,4 +2314,160 @@ ipcMain.handle('type-text', async (event, text) => {
       return { success: false, error: error.message };
     }
   }
+});
+
+// ============== Chat Window IPC Handlers ==============
+
+ipcMain.handle('chat-list-conversations', async () => {
+  const index = loadConversationIndex();
+  return index.sort((a, b) => b.updatedAt - a.updatedAt);
+});
+
+ipcMain.handle('chat-load-conversation', async (event, id) => {
+  return loadConversation(id);
+});
+
+ipcMain.handle('chat-create-conversation', async () => {
+  const id = generateId('chat');
+  const now = Date.now();
+  const conv = {
+    id,
+    title: 'New Chat',
+    createdAt: now,
+    updatedAt: now,
+    messages: []
+  };
+  saveConversation(conv);
+  return conv;
+});
+
+ipcMain.handle('chat-delete-conversation', async (event, id) => {
+  try {
+    deleteConversationFromIndex(id);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('chat-rename-conversation', async (event, id, newTitle) => {
+  try {
+    const conv = loadConversation(id);
+    if (!conv) return { success: false, error: 'Not found' };
+    conv.title = newTitle;
+    conv.updatedAt = Date.now();
+    saveConversation(conv);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('chat-search', async (event, query) => {
+  if (!query || query.trim().length === 0) return [];
+  const q = query.toLowerCase();
+  const index = loadConversationIndex();
+  const results = [];
+
+  for (const entry of index) {
+    // Check title
+    if (entry.title.toLowerCase().includes(q)) {
+      results.push({ conversationId: entry.id, title: entry.title, matchType: 'title', timestamp: entry.updatedAt });
+    }
+    // Check message content
+    const conv = loadConversation(entry.id);
+    if (conv && conv.messages) {
+      for (const msg of conv.messages) {
+        if (msg.content && msg.content.toLowerCase().includes(q)) {
+          results.push({
+            conversationId: entry.id,
+            title: entry.title,
+            content: msg.content.substring(0, 150),
+            timestamp: msg.timestamp,
+            matchType: 'message'
+          });
+          break; // one match per conversation is enough
+        }
+      }
+    }
+  }
+  return results;
+});
+
+ipcMain.handle('chat-export-markdown', async (event, id) => {
+  const conv = loadConversation(id);
+  if (!conv) return { success: false, error: 'Not found' };
+
+  let md = `# ${conv.title}\n\n`;
+  for (const msg of conv.messages) {
+    const date = new Date(msg.timestamp).toLocaleString();
+    if (msg.role === 'user') {
+      md += `**You** (${date}):\n${msg.content}\n\n`;
+    } else {
+      md += `**AI** (${date}):\n${msg.content}\n\n`;
+    }
+  }
+
+  const result = await dialog.showSaveDialog(chatWindow, {
+    title: 'Export Chat',
+    defaultPath: `${conv.title.replace(/[^a-z0-9]/gi, '_')}.md`,
+    filters: [{ name: 'Markdown', extensions: ['md'] }]
+  });
+
+  if (result.canceled || !result.filePath) return { success: false, canceled: true };
+  fs.writeFileSync(result.filePath, md, 'utf8');
+  return { success: true, filePath: result.filePath };
+});
+
+ipcMain.handle('chat-get-current-model', async () => {
+  return { agent: chatAgent };
+});
+
+ipcMain.on('chat-agent-change', (event, agent) => {
+  chatAgent = agent || 'auto';
+  console.log('Chat agent changed to:', chatAgent);
+});
+
+ipcMain.on('chat-send-message', (event, conversationId, userMessage) => {
+  // Save user message to disk
+  const userMsg = {
+    id: generateId('msg'),
+    role: 'user',
+    content: userMessage,
+    timestamp: Date.now()
+  };
+  const conv = saveChatMessage(conversationId, userMsg);
+  if (!conv) return;
+
+  // Auto-title: first user message → first 6 words
+  if (conv.messages.filter(m => m.role === 'user').length === 1) {
+    const words = userMessage.split(/\s+/).slice(0, 6).join(' ');
+    conv.title = words.length > 50 ? words.substring(0, 50) + '...' : words;
+    conv.updatedAt = Date.now();
+    saveConversation(conv);
+    if (chatWindow && !chatWindow.isDestroyed()) {
+      chatWindow.webContents.send('chat-title-updated', { id: conversationId, title: conv.title });
+    }
+  }
+
+  // Build API messages from conversation history
+  const systemMsg = {
+    role: 'system',
+    content: 'You are a helpful AI assistant. Use markdown formatting in your responses: headings, bold, italic, code blocks with language tags, lists, and tables where appropriate. Be thorough and well-organized.'
+  };
+  const apiMessages = [systemMsg];
+  for (const msg of conv.messages) {
+    apiMessages.push({ role: msg.role, content: msg.content });
+  }
+
+  generateChatStreaming(conversationId, userMessage, apiMessages);
+});
+
+ipcMain.on('chat-stop-generation', () => {
+  chatStreamActive = false;
+  pendingChatRequest = null;
+});
+
+ipcMain.on('chat-close-window', () => {
+  if (chatWindow) chatWindow.close();
 });

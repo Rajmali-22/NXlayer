@@ -208,7 +208,7 @@ const PROVIDER_TEST_MODELS = {
     'TOGETHERAI_API_KEY': 'together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo',
     'PERPLEXITYAI_API_KEY': 'perplexity/sonar-pro',
     'COHERE_API_KEY': 'cohere_chat/command-r-plus',
-    'REPLICATE_API_TOKEN': 'replicate/meta/llama-3.1-405b-instruct',
+    'REPLICATE_API_TOKEN': 'replicate/meta/meta-llama-3.1-405b-instruct',
 };
 
 async function initProviderUI() {

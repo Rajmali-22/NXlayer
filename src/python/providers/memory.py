@@ -1,8 +1,9 @@
 """
-Per-window conversation memory using LangChain.
+Per-window conversation memory.
 
 Each active application window gets its own conversation session.
-Sessions persist to disk and auto-prune after 7 days.
+Sessions persist to disk (effectively unlimited); what is sent to the LLM
+is capped by MAX_HISTORY_SENT_TO_LLM to avoid context-window overflow.
 Memory is only attached for powerful/reasoning requests (not fast/grammar).
 """
 
@@ -23,8 +24,9 @@ except ImportError:
 # CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
 
-MAX_HISTORY_PER_SESSION = 10   # keep last N exchanges (user + assistant pairs)
-SESSION_MAX_AGE_DAYS = 7
+MAX_HISTORY_PER_SESSION = 99999   # keep last N exchanges on disk (effectively unlimited)
+MAX_HISTORY_SENT_TO_LLM = 50     # cap messages sent to LLM (last N exchanges) to avoid context-window overflow
+SESSION_MAX_AGE_DAYS = 36500     # ~100 years (effectively never prune by age)
 SESSIONS_DIR = os.path.join("data", "memory", "sessions")
 GLOBAL_SESSION_KEY = "_global"  # shared memory pool across all windows/models
 
@@ -164,11 +166,11 @@ class MemoryManager:
                 seen.add(key_tuple)
                 merged.append(m)
 
-        # Sort by timestamp and trim
+        # Sort by timestamp and trim to context cap (so we don't exceed LLM context window)
         merged.sort(key=lambda m: m.get("ts", 0))
-        max_msgs = MAX_HISTORY_PER_SESSION * 2
-        if len(merged) > max_msgs:
-            merged = merged[-max_msgs:]
+        max_sent = MAX_HISTORY_SENT_TO_LLM * 2
+        if len(merged) > max_sent:
+            merged = merged[-max_sent:]
 
         # Strip timestamps for the API messages
         return [{"role": m["role"], "content": m["content"]} for m in merged]

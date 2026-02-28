@@ -30,7 +30,7 @@ PROVIDER_REGISTRY = [
     ("TOGETHERAI_API_KEY",    "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo", "powerful",  "Together Llama 3.3 70B"),
     ("PERPLEXITYAI_API_KEY",  "perplexity/sonar-pro",                                "powerful",  "Perplexity Sonar Pro"),
     ("COHERE_API_KEY",        "cohere_chat/command-r-plus",                           "powerful",  "Cohere Command R+"),
-    ("REPLICATE_API_TOKEN",   "replicate/meta/llama-3.1-405b-instruct",              "powerful",  "Replicate Llama 405B"),
+    ("REPLICATE_API_TOKEN",   "replicate/meta/meta-llama-3.1-405b-instruct",         "powerful",  "Replicate Llama 405B"),
     ("DEEPSEEK_API_KEY",      "deepseek/deepseek-reasoner",                          "reasoning", "DeepSeek Reasoner"),
 ]
 

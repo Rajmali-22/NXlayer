@@ -34,6 +34,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await loadSettings();
     setupEventListeners();
+    setupSidebarNavigation();
     updateUI();
     initProviderUI();
 });
@@ -352,6 +353,40 @@ async function refreshProviderCards() {
     }
 }
 
+// Sidebar navigation setup
+function setupSidebarNavigation() {
+    const sidebarItems = document.querySelectorAll('.sidebar-item');
+    const sections = document.querySelectorAll('.section');
+
+    sidebarItems.forEach(item => {
+        item.addEventListener('click', () => {
+            // Remove active class from all items and sections
+            sidebarItems.forEach(i => i.classList.remove('active'));
+            sections.forEach(s => s.classList.remove('active-section'));
+
+            // Add active class to clicked item
+            item.classList.add('active');
+
+            // Show corresponding section
+            const sectionId = item.dataset.section + '-section';
+            const section = document.getElementById(sectionId);
+            if (section) {
+                section.classList.add('active-section');
+            }
+        });
+    });
+
+    // Set initial active section
+    const initialSection = document.querySelector('.sidebar-item.active');
+    if (initialSection) {
+        const sectionId = initialSection.dataset.section + '-section';
+        const section = document.getElementById(sectionId);
+        if (section) {
+            section.classList.add('active-section');
+        }
+    }
+}
+
 // Listen for settings sync from main process
 ipcRenderer.on('sync-settings', (event, newSettings) => {
     if (newSettings.masterEnabled !== undefined) {
@@ -377,3 +412,18 @@ ipcRenderer.on('sync-settings', (event, newSettings) => {
     }
     updateUI();
 });
+
+// Add cancel button functionality for API key input
+function setupCancelButton() {
+    const cancelBtn = document.getElementById('cancel-key-btn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+            document.getElementById('new-key-provider').value = '';
+            document.getElementById('new-key-input').value = '';
+            document.getElementById('key-status').textContent = '';
+        });
+    }
+}
+
+// Call this after DOM is loaded
+setTimeout(setupCancelButton, 100);

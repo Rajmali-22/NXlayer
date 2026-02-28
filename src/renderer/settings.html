@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings</title>
+    <title>Settings - Prod_Layer</title>
     <style>
         * {
             margin: 0;
@@ -20,6 +20,10 @@
             --text-secondary: rgba(255, 255, 255, 0.55);
             --toggle-bg: rgba(120, 120, 128, 0.32);
             --toggle-active: #34c759;
+            --accent-color: #007aff;
+            --success-color: #34c759;
+            --warning-color: #ff9500;
+            --error-color: #ff3b30;
         }
 
         body.light-mode {
@@ -30,6 +34,7 @@
             --text-primary: rgba(0, 0, 0, 0.88);
             --text-secondary: rgba(0, 0, 0, 0.5);
             --toggle-bg: rgba(120, 120, 128, 0.2);
+            --accent-color: #007aff;
         }
 
         body {
@@ -37,6 +42,7 @@
             background: transparent;
             color: var(--text-primary);
             user-select: none;
+            overflow: hidden;
         }
 
         .settings-container {
@@ -48,15 +54,28 @@
             border: 1px solid rgba(255, 255, 255, 0.15);
             border-radius: 12px;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
+            display: flex;
+            flex-direction: column;
             position: relative;
+            overflow: hidden;
         }
 
-        /* Close button - top right corner */
+        /* Header with title and close button */
+        .settings-header {
+            padding: 20px 24px 16px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .settings-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
         .close-btn {
-            position: absolute;
-            right: 12px;
-            top: 12px;
             width: 28px;
             height: 28px;
             border: none;
@@ -69,7 +88,6 @@
             justify-content: center;
             font-size: 16px;
             transition: all 0.15s ease;
-            z-index: 10;
         }
 
         .close-btn:hover {
@@ -77,59 +95,113 @@
             color: #ff3b30;
         }
 
-        /* Settings List */
-        .settings-list {
-            padding: 50px 30px 60px;
-            height: 100%;
+        /* Main content area with sidebar and content */
+        .settings-main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Sidebar navigation */
+        .settings-sidebar {
+            width: 200px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            padding: 20px 0;
             overflow-y: auto;
         }
 
-        .settings-list::-webkit-scrollbar {
-            width: 6px;
+        .sidebar-nav {
+            list-style: none;
         }
 
-        .settings-list::-webkit-scrollbar-track {
+        .sidebar-item {
+            padding: 12px 24px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sidebar-item:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .sidebar-item.active {
+            background: rgba(0, 122, 255, 0.15);
+            color: var(--accent-color);
+            border-left: 3px solid var(--accent-color);
+        }
+
+        .sidebar-item i {
+            font-size: 16px;
+        }
+
+        /* Main content area */
+        .settings-content {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            height: 100%;
+        }
+
+        .settings-content::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .settings-content::-webkit-scrollbar-track {
             background: transparent;
         }
 
-        .settings-list::-webkit-scrollbar-thumb {
+        .settings-content::-webkit-scrollbar-thumb {
             background: rgba(255, 255, 255, 0.25);
-            border-radius: 3px;
+            border-radius: 4px;
         }
 
-        .settings-list::-webkit-scrollbar-thumb:hover {
+        .settings-content::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 255, 255, 0.4);
         }
 
+        /* Section styling */
+        .section {
+            margin-bottom: 30px;
+        }
+
         .section-title {
-            font-size: 13px;
+            font-size: 18px;
             font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .section-description {
+            font-size: 14px;
             color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            padding: 20px 0 12px;
-            margin-top: 10px;
+            margin-bottom: 20px;
         }
 
-        .section-title:first-child {
-            margin-top: 0;
-            padding-top: 0;
-        }
-
+        /* Setting items */
         .setting-item {
             display: flex;
             align-items: center;
             justify-content: space-between;
             padding: 16px 20px;
             background: var(--bg-secondary);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 12px;
-            margin-bottom: 8px;
-            transition: background 0.15s ease;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            margin-bottom: 12px;
+            transition: all 0.15s ease;
         }
 
         .setting-item:hover {
             background: var(--bg-hover);
+            border-color: rgba(0, 122, 255, 0.2);
         }
 
         .setting-info {
@@ -139,7 +211,7 @@
         }
 
         .setting-label {
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 500;
             color: var(--text-primary);
         }
@@ -149,11 +221,11 @@
             color: var(--text-secondary);
         }
 
-        /* Toggle Switch - iOS style */
+        /* Toggle Switch - enhanced */
         .toggle {
             position: relative;
-            width: 51px;
-            height: 31px;
+            width: 52px;
+            height: 32px;
             cursor: pointer;
             flex-shrink: 0;
         }
@@ -170,345 +242,483 @@
             bottom: 0;
             background: var(--toggle-bg);
             border-radius: 16px;
-            transition: background 0.25s ease;
+            transition: all 0.25s ease;
         }
 
         .toggle input:checked + .toggle-track {
-            background: var(--toggle-active);
+            background: var(--accent-color);
         }
 
         .toggle-thumb {
             position: absolute;
-            width: 27px;
-            height: 27px;
+            width: 28px;
+            height: 28px;
             background: white;
             border-radius: 50%;
             top: 2px;
             left: 2px;
-            transition: transform 0.25s ease;
-            box-shadow:
-                0 3px 8px rgba(0, 0, 0, 0.15),
-                0 1px 1px rgba(0, 0, 0, 0.1);
+            transition: all 0.25s ease;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
         }
 
         .toggle input:checked ~ .toggle-thumb {
             transform: translateX(20px);
         }
 
-        /* Provider management styles */
-        .provider-dropdown {
-            padding: 8px 12px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            color: var(--text-primary);
-            font-size: 13px;
-            outline: none;
-            cursor: pointer;
-        }
-
-        .provider-dropdown option {
-            background: rgba(28, 28, 30, 0.95);
-            color: var(--text-primary);
-        }
-
-        .key-input {
-            flex: 1;
-            padding: 8px 12px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            color: var(--text-primary);
-            font-size: 13px;
-            font-family: 'SF Mono', Monaco, 'Consolas', monospace;
-            outline: none;
-        }
-
-        .key-input:focus {
-            border-color: rgba(52, 199, 89, 0.5);
-        }
-
-        .save-key-btn {
-            padding: 8px 16px;
-            background: var(--toggle-active);
-            border: none;
-            border-radius: 8px;
-            color: #fff;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: opacity 0.15s;
-        }
-
-        .save-key-btn:hover {
-            opacity: 0.85;
-        }
-
-        .key-status {
-            font-size: 12px;
-            min-height: 16px;
-        }
-
-        .key-status.success {
-            color: var(--toggle-active);
-        }
-
-        .key-status.error {
-            color: #ff3b30;
+        /* Provider management - enhanced */
+        .provider-section {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
         }
 
         .provider-card {
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 20px;
+            flex-direction: column;
+            gap: 12px;
+            padding: 16px 20px;
             background: var(--bg-secondary);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 12px;
-            margin-bottom: 6px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            transition: all 0.15s ease;
         }
 
-        .provider-card .provider-name {
-            font-size: 14px;
+        .provider-card:hover {
+            background: var(--bg-hover);
+        }
+
+        .provider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .provider-name {
+            font-size: 15px;
             font-weight: 500;
             color: var(--text-primary);
         }
 
-        .provider-card .provider-actions {
+        .provider-actions {
             display: flex;
             gap: 8px;
             align-items: center;
         }
 
         .status-badge {
-            width: 8px;
-            height: 8px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
             display: inline-block;
+            margin-right: 6px;
         }
 
         .status-badge.active {
-            background: var(--toggle-active);
+            background: var(--success-color);
         }
 
         .status-badge.inactive {
-            background: rgba(120, 120, 128, 0.32);
+            background: var(--text-secondary);
         }
 
-        .test-btn {
-            padding: 4px 10px;
-            background: var(--bg-hover);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            color: var(--text-secondary);
-            font-size: 11px;
+        /* Enhanced buttons */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
             cursor: pointer;
-            transition: all 0.15s;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
 
-        .test-btn:hover {
-            background: rgba(100, 150, 255, 0.15);
-            border-color: rgba(100, 150, 255, 0.3);
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: rgba(0, 122, 255, 0.9);
+        }
+
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-hover);
+            border-color: rgba(0, 122, 255, 0.2);
+        }
+
+        .btn-danger {
+            background: rgba(255, 59, 48, 0.15);
+            color: #ff3b30;
+            border: 1px solid rgba(255, 59, 48, 0.2);
+        }
+
+        .btn-danger:hover {
+            background: rgba(255, 59, 48, 0.25);
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        /* Input fields */
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .input-label {
+            font-size: 13px;
+            font-weight: 500;
             color: var(--text-primary);
         }
 
-        .test-btn.testing {
-            opacity: 0.5;
-            cursor: wait;
+        .input-wrapper {
+            position: relative;
         }
 
-        .test-btn.pass {
-            background: rgba(52, 199, 89, 0.15);
-            border-color: rgba(52, 199, 89, 0.3);
-            color: var(--toggle-active);
-        }
-
-        .test-btn.fail {
-            background: rgba(255, 59, 48, 0.15);
-            border-color: rgba(255, 59, 48, 0.3);
-            color: #ff3b30;
-        }
-
-        .remove-btn {
-            padding: 4px 8px;
-            background: none;
-            border: 1px solid transparent;
-            border-radius: 6px;
-            color: var(--text-secondary);
+        .key-input {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
             font-size: 14px;
+            font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+            outline: none;
+            transition: all 0.15s ease;
+        }
+
+        .key-input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.1);
+        }
+
+        .dropdown {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            outline: none;
             cursor: pointer;
-            transition: all 0.15s;
+            transition: all 0.15s ease;
+            appearance: none;
+            background-image: url('data:image/svg+xml;utf8,<svg fill="%23777" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 16px;
         }
 
-        .remove-btn:hover {
-            background: rgba(255, 59, 48, 0.15);
-            border-color: rgba(255, 59, 48, 0.2);
-            color: #ff3b30;
+        .dropdown:focus {
+            border-color: var(--accent-color);
         }
 
-        /* Footer shortcut hint */
-        .footer {
-            position: absolute;
-            bottom: 20px;
-            left: 0;
-            right: 0;
+        /* Status messages */
+        .status-message {
+            font-size: 13px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-top: 8px;
+        }
+
+        .status-success {
+            background: rgba(52, 199, 89, 0.1);
+            color: var(--success-color);
+        }
+
+        .status-error {
+            background: rgba(255, 59, 48, 0.1);
+            color: var(--error-color);
+        }
+
+        .status-info {
+            background: rgba(0, 122, 255, 0.1);
+            color: var(--accent-color);
+        }
+
+        /* Footer */
+        .settings-footer {
+            padding: 20px 24px;
+            border-top: 1px solid var(--border-color);
             display: flex;
-            justify-content: center;
-        }
-
-        .shortcut {
+            justify-content: space-between;
+            align-items: center;
             font-size: 12px;
             color: var(--text-secondary);
+        }
+
+        .footer-shortcut {
             background: var(--bg-secondary);
-            padding: 8px 16px;
-            border-radius: 8px;
+            padding: 6px 12px;
+            border-radius: 6px;
             font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+        }
+
+        .version-info {
+            display: flex;
+            gap: 16px;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .settings-sidebar {
+                width: 60px;
+            }
+
+            .sidebar-item span {
+                display: none;
+            }
+
+            .settings-content {
+                padding: 20px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="settings-container">
-        <button class="close-btn" id="close-btn">×</button>
-
-        <div class="settings-list">
-            <div class="section-title">Master Control</div>
-
-            <div class="setting-item">
-                <div class="setting-info">
-                    <span class="setting-label">AI Assistant</span>
-                    <span class="setting-desc">Enable all AI features</span>
-                </div>
-                <label class="toggle">
-                    <input type="checkbox" id="master-toggle" checked>
-                    <div class="toggle-track"></div>
-                    <div class="toggle-thumb"></div>
-                </label>
-            </div>
-
-            <div class="section-title">Appearance</div>
-
-            <div class="setting-item">
-                <div class="setting-info">
-                    <span class="setting-label">Dark Mode</span>
-                    <span class="setting-desc">Use dark color theme</span>
-                </div>
-                <label class="toggle">
-                    <input type="checkbox" id="dark-mode-toggle" checked>
-                    <div class="toggle-track"></div>
-                    <div class="toggle-thumb"></div>
-                </label>
-            </div>
-
-            <div class="section-title">Behavior</div>
-
-            <div class="setting-item">
-                <div class="setting-info">
-                    <span class="setting-label">Human-like Typing</span>
-                    <span class="setting-desc">Natural speed variation</span>
-                </div>
-                <label class="toggle">
-                    <input type="checkbox" id="humanize-toggle">
-                    <div class="toggle-track"></div>
-                    <div class="toggle-thumb"></div>
-                </label>
-            </div>
-
-            <div class="setting-item">
-                <div class="setting-info">
-                    <span class="setting-label">Auto Inject</span>
-                    <span class="setting-desc">Skip suggestion popup</span>
-                </div>
-                <label class="toggle">
-                    <input type="checkbox" id="auto-inject-toggle">
-                    <div class="toggle-track"></div>
-                    <div class="toggle-thumb"></div>
-                </label>
-            </div>
-
-            <div class="setting-item">
-                <div class="setting-info">
-                    <span class="setting-label">Live Mode</span>
-                    <span class="setting-desc">Auto-suggest on typing pause</span>
-                </div>
-                <label class="toggle">
-                    <input type="checkbox" id="live-mode-toggle">
-                    <div class="toggle-track"></div>
-                    <div class="toggle-thumb"></div>
-                </label>
-            </div>
-
-            <div class="section-title">AI Providers</div>
-
-            <div id="provider-section">
-                <div class="setting-item" style="flex-direction: column; align-items: stretch; gap: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span class="setting-label">Default Provider</span>
-                        <select id="default-provider" class="provider-dropdown">
-                            <option value="auto">Auto</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div id="provider-cards"></div>
-
-                <div class="setting-item" id="add-key-section" style="flex-direction: column; align-items: stretch; gap: 8px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span class="setting-label" style="font-size: 14px;">Add API Key</span>
-                    </div>
-                    <div style="display: flex; gap: 6px;">
-                        <select id="new-key-provider" class="provider-dropdown" style="flex: 1;">
-                            <option value="">Select provider...</option>
-                            <option value="GROQ_API_KEY">Groq</option>
-                            <option value="MISTRAL_API_KEY">Mistral</option>
-                            <option value="DEEPSEEK_API_KEY">DeepSeek</option>
-                            <option value="ANTHROPIC_API_KEY">Anthropic</option>
-                            <option value="OPENAI_API_KEY">OpenAI</option>
-                            <option value="GEMINI_API_KEY">Gemini</option>
-                            <option value="XAI_API_KEY">xAI (Grok)</option>
-                            <option value="TOGETHERAI_API_KEY">Together AI</option>
-                            <option value="PERPLEXITYAI_API_KEY">Perplexity</option>
-                            <option value="COHERE_API_KEY">Cohere</option>
-                            <option value="REPLICATE_API_TOKEN">Replicate</option>
-                        </select>
-                    </div>
-                    <div style="display: flex; gap: 6px;">
-                        <input type="password" id="new-key-input" class="key-input" placeholder="Paste API key...">
-                        <button id="save-key-btn" class="save-key-btn">Save</button>
-                    </div>
-                    <div id="key-status" class="key-status"></div>
-                </div>
-            </div>
-
-            <div class="section-title">Interview Mode</div>
-
-            <div class="setting-item">
-                <div class="setting-info">
-                    <span class="setting-label">Coding Mode</span>
-                    <span class="setting-desc">Show code + explanation window</span>
-                </div>
-                <label class="toggle">
-                    <input type="checkbox" id="coding-mode-toggle">
-                    <div class="toggle-track"></div>
-                    <div class="toggle-thumb"></div>
-                </label>
-            </div>
-
-            <div class="setting-item">
-                <div class="setting-info">
-                    <span class="setting-label">Ultra Human Typing</span>
-                    <span class="setting-desc">Chain-of-thought code injection</span>
-                </div>
-                <label class="toggle">
-                    <input type="checkbox" id="ultra-human-toggle">
-                    <div class="toggle-track"></div>
-                    <div class="toggle-thumb"></div>
-                </label>
-            </div>
+        <!-- Header -->
+        <div class="settings-header">
+            <div class="settings-title">Settings</div>
+            <button class="close-btn" id="close-btn">×</button>
         </div>
 
-        <div class="footer">
-            <span class="shortcut">Ctrl + Shift + P to inject</span>
+        <!-- Main content -->
+        <div class="settings-main">
+            <!-- Sidebar -->
+            <nav class="settings-sidebar">
+                <ul class="sidebar-nav">
+                    <li class="sidebar-item active" data-section="general">
+                        <i>⚙️</i><span>General</span>
+                    </li>
+                    <li class="sidebar-item" data-section="appearance">
+                        <i>🎨</i><span>Appearance</span>
+                    </li>
+                    <li class="sidebar-item" data-section="behavior">
+                        <i>🤖</i><span>Behavior</span>
+                    </li>
+                    <li class="sidebar-item" data-section="providers">
+                        <i>🔌</i><span>Providers</span>
+                    </li>
+                    <li class="sidebar-item" data-section="interview">
+                        <i>💻</i><span>Interview</span>
+                    </li>
+                    <li class="sidebar-item" data-section="about">
+                        <i>ℹ️</i><span>About</span>
+                    </li>
+                </ul>
+            </nav>
+
+            <!-- Content -->
+            <main class="settings-content">
+                <!-- General Section -->
+                <div id="general-section" class="section active-section">
+                    <h2 class="section-title">General Settings</h2>
+                    <p class="section-description">Master controls and basic configuration</p>
+
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <span class="setting-label">AI Assistant</span>
+                            <span class="setting-desc">Enable all AI features globally</span>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="master-toggle" checked>
+                            <div class="toggle-track"></div>
+                            <div class="toggle-thumb"></div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Appearance Section -->
+                <div id="appearance-section" class="section">
+                    <h2 class="section-title">Appearance</h2>
+                    <p class="section-description">Customize the look and feel</p>
+
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <span class="setting-label">Dark Mode</span>
+                            <span class="setting-desc">Use dark color theme</span>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="dark-mode-toggle" checked>
+                            <div class="toggle-track"></div>
+                            <div class="toggle-thumb"></div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Behavior Section -->
+                <div id="behavior-section" class="section">
+                    <h2 class="section-title">Behavior</h2>
+                    <p class="section-description">Control how AI responds and interacts</p>
+
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <span class="setting-label">Human-like Typing</span>
+                            <span class="setting-desc">Natural speed variation for realistic typing</span>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="humanize-toggle">
+                            <div class="toggle-track"></div>
+                            <div class="toggle-thumb"></div>
+                        </label>
+                    </div>
+
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <span class="setting-label">Auto Inject</span>
+                            <span class="setting-desc">Skip suggestion popup and inject directly</span>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="auto-inject-toggle">
+                            <div class="toggle-track"></div>
+                            <div class="toggle-thumb"></div>
+                        </label>
+                    </div>
+
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <span class="setting-label">Live Mode</span>
+                            <span class="setting-desc">Auto-suggest on typing pause</span>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="live-mode-toggle">
+                            <div class="toggle-track"></div>
+                            <div class="toggle-thumb"></div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Providers Section -->
+                <div id="providers-section" class="section">
+                    <h2 class="section-title">AI Providers</h2>
+                    <p class="section-description">Configure and manage AI model providers</p>
+
+                    <div class="provider-section">
+                        <div class="setting-item">
+                            <div class="setting-info">
+                                <span class="setting-label">Default Provider</span>
+                                <span class="setting-desc">Select preferred AI model</span>
+                            </div>
+                            <select id="default-provider" class="dropdown">
+                                <option value="auto">Auto (Smart Routing)</option>
+                            </select>
+                        </div>
+
+                        <div id="provider-cards"></div>
+
+                        <div class="provider-card" id="add-key-section">
+                            <div class="provider-header">
+                                <span class="provider-name">Add API Key</span>
+                            </div>
+                            <div class="input-group">
+                                <label class="input-label">Provider</label>
+                                <select id="new-key-provider" class="dropdown">
+                                    <option value="">Select provider...</option>
+                                    <option value="GROQ_API_KEY">Groq</option>
+                                    <option value="MISTRAL_API_KEY">Mistral</option>
+                                    <option value="DEEPSEEK_API_KEY">DeepSeek</option>
+                                    <option value="ANTHROPIC_API_KEY">Anthropic</option>
+                                    <option value="OPENAI_API_KEY">OpenAI</option>
+                                    <option value="GEMINI_API_KEY">Gemini</option>
+                                    <option value="XAI_API_KEY">xAI (Grok)</option>
+                                    <option value="TOGETHERAI_API_KEY">Together AI</option>
+                                    <option value="PERPLEXITYAI_API_KEY">Perplexity</option>
+                                    <option value="COHERE_API_KEY">Cohere</option>
+                                    <option value="REPLICATE_API_TOKEN">Replicate</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label class="input-label">API Key</label>
+                                <div class="input-wrapper">
+                                    <input type="password" id="new-key-input" class="key-input" placeholder="Paste API key...">
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <button id="save-key-btn" class="btn btn-primary btn-sm">Save Key</button>
+                                <button id="cancel-key-btn" class="btn btn-secondary btn-sm">Cancel</button>
+                            </div>
+                            <div id="key-status" class="status-message"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interview Section -->
+                <div id="interview-section" class="section">
+                    <h2 class="section-title">Interview Mode</h2>
+                    <p class="section-description">Specialized settings for coding interviews</p>
+
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <span class="setting-label">Coding Mode</span>
+                            <span class="setting-desc">Show code + explanation windows</span>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="coding-mode-toggle">
+                            <div class="toggle-track"></div>
+                            <div class="toggle-thumb"></div>
+                        </label>
+                    </div>
+
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <span class="setting-label">Ultra Human Typing</span>
+                            <span class="setting-desc">Chain-of-thought code injection with realistic behavior</span>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="ultra-human-toggle">
+                            <div class="toggle-track"></div>
+                            <div class="toggle-thumb"></div>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- About Section -->
+                <div id="about-section" class="section">
+                    <h2 class="section-title">About Prod_Layer</h2>
+                    <p class="section-description">Version and information</p>
+
+                    <div class="provider-card">
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <div>
+                                <span style="font-weight: 500; color: var(--text-primary);">Version</span>
+                                <span style="color: var(--text-secondary); margin-left: 8px;">1.0.0</span>
+                            </div>
+                            <div>
+                                <span style="font-weight: 500; color: var(--text-primary);">License</span>
+                                <span style="color: var(--text-secondary); margin-left: 8px;">MIT</span>
+                            </div>
+                            <div>
+                                <span style="font-weight: 500; color: var(--text-primary);">GitHub</span>
+                                <span style="color: var(--accent-color); margin-left: 8px;">Rajmali-22/Prod_layer</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Footer -->
+        <div class="settings-footer">
+            <div class="footer-shortcut">Ctrl + Shift + P to inject</div>
+            <div class="version-info">
+                <span>Prod_Layer v1.0.0</span>
+                <span>© 2024 Rajmali-22</span>
+            </div>
         </div>
     </div>
 

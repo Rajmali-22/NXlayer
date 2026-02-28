@@ -1,6 +1,10 @@
-# GhostType
+# Prod_Layer
 
-AI-powered stealth typing assistant for real-time typing, coding interviews, and productivity. Features smart context detection, human-like typing simulation, and invisible screen-share mode.
+A **productive layer** deployed on any OS. Integrated with all AI, **core memory** to store context, and the ability to **switch model mid-context**. Seamless access to AI and information—**do tasks in one go**, **save your toggle tax**.
+
+## Future of Work & Productivity
+
+Prod_Layer is a single layer that runs everywhere you work: browser, IDE, email. It plugs into **all major AI providers** with one config, keeps **core memory** so context is never lost, and lets you **switch models mid-context** (fast / powerful / reasoning) by task. Get **seamless access to AI and information**, **do tasks in one go**, and **save your toggle tax**—no more jumping between tabs. Overlays stay **invisible in screen share** (Meet, Zoom, Teams). See **[HACKATHON.md](HACKATHON.md)** for the full submission and demo script.
 
 ## Features
 
@@ -91,7 +95,7 @@ For coding interviews - types code like a real developer:
 ## Project Structure
 
 ```
-GHOSTYPE/
+PROD_LAYER/
 ├── main.js                          # Electron main process
 ├── package.json                     # Node dependencies
 ├── requirements.txt                 # Python dependencies

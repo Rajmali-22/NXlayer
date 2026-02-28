@@ -11,21 +11,31 @@ function getPythonCommand() {
   return process.platform === 'win32' ? 'python' : 'python3';
 }
 
-// Windows: exclude window from screen capture (Meet, Zoom, etc.) so it's invisible when sharing
-function setWindowExcludeFromCapture(win) {
+// Windows: set whether window is excluded from screen capture (Ghost ON) or visible in capture (Ghost OFF)
+function applyWindowCaptureAffinity(win) {
   if (os.platform() !== 'win32' || !win || win.isDestroyed()) return;
   try {
     const koffi = require('koffi');
     const user32 = koffi.load('user32.dll');
     const SetWindowDisplayAffinity = user32.func('SetWindowDisplayAffinity', 'bool', ['void *', 'uint32']);
+    const WDA_NONE = 0;
     const WDA_EXCLUDEFROMCAPTURE = 0x11; // Windows 10 2004+
     const buf = win.getNativeWindowHandle();
     const hwnd = buf.length === 8 ? Number(buf.readBigUInt64LE(0)) : buf.readUInt32LE(0);
-    const ok = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
+    const affinity = ghostModeEnabled ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE;
+    const ok = SetWindowDisplayAffinity(hwnd, affinity);
     if (!ok) console.warn('SetWindowDisplayAffinity failed for window');
   } catch (e) {
-    console.warn('Could not set window exclude-from-capture:', e.message);
+    console.warn('Could not set window capture affinity:', e.message);
   }
+}
+
+function applyGhostModeToAllWindows() {
+  if (mainWindow && !mainWindow.isDestroyed()) applyWindowCaptureAffinity(mainWindow);
+  if (outputWindow && !outputWindow.isDestroyed()) applyWindowCaptureAffinity(outputWindow);
+  if (explanationWindow && !explanationWindow.isDestroyed()) applyWindowCaptureAffinity(explanationWindow);
+  if (settingsWindow && !settingsWindow.isDestroyed()) applyWindowCaptureAffinity(settingsWindow);
+  if (chatWindow && !chatWindow.isDestroyed()) applyWindowCaptureAffinity(chatWindow);
 }
 
 // Try to load robotjs, but handle errors gracefully
@@ -74,6 +84,9 @@ let aiBackendReady = false;
 
 // Master control - pause/resume all AI features
 let masterEnabled = true;
+
+// Ghost mode: when true, app is hidden from screen capture (Meet/Zoom). When false, app is visible so you can show it in meetings.
+let ghostModeEnabled = true;
 
 // Cached config (loaded once at startup)
 let cachedEnv = null;
@@ -240,8 +253,7 @@ function createWindow() {
   // Allow mouse events on the window
   mainWindow.setIgnoreMouseEvents(false);
 
-  // Exclude from screen capture (invisible in Meet/Zoom when sharing)
-  setWindowExcludeFromCapture(mainWindow);
+  applyWindowCaptureAffinity(mainWindow);
 }
 
 function createOutputWindow() {
@@ -268,8 +280,7 @@ function createOutputWindow() {
   outputWindow.loadFile(path.join('src', 'renderer', 'output.html'));
   outputWindow.hide();
 
-  // Exclude from screen capture so the suggestion popup is invisible in Meet/Zoom/Teams when sharing screen
-  setWindowExcludeFromCapture(outputWindow);
+  applyWindowCaptureAffinity(outputWindow);
 
   outputWindow.on('closed', () => {
     outputWindow = null;
@@ -300,8 +311,7 @@ function createExplanationWindow() {
   explanationWindow.loadFile(path.join('src', 'renderer', 'explanation.html'));
   explanationWindow.hide();
 
-  // Exclude from screen capture
-  setWindowExcludeFromCapture(explanationWindow);
+  applyWindowCaptureAffinity(explanationWindow);
 
   explanationWindow.on('closed', () => {
     explanationWindow = null;
@@ -319,17 +329,21 @@ function createSettingsWindow() {
   const display = screen.getDisplayNearestPoint(cursor);
   const workArea = display.workArea;
 
-  // Clean settings panel - expanded for provider management
-  const windowWidth = 380;
-  const windowHeight = 780;
+  // Fixed wide settings panel — no scrolling, professional layout
+  const windowWidth = 720;
+  const windowHeight = 560;
 
-  // Position near center-top of screen
+  // Position near center of screen
   const x = Math.round(workArea.x + (workArea.width - windowWidth) / 2);
-  const y = Math.round(workArea.y + 100);
+  const y = Math.round(workArea.y + (workArea.height - windowHeight) / 2 - 40);
 
   settingsWindow = new BrowserWindow({
     width: windowWidth,
     height: windowHeight,
+    minWidth: windowWidth,
+    maxWidth: windowWidth,
+    minHeight: windowHeight,
+    maxHeight: windowHeight,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -500,7 +514,7 @@ function createChatWindow() {
   });
 
   chatWindow.loadFile(path.join('src', 'renderer', 'chat.html'));
-  setWindowExcludeFromCapture(chatWindow);
+  applyWindowCaptureAffinity(chatWindow);
 
   chatWindow.on('closed', () => {
     chatWindow = null;
@@ -1445,6 +1459,15 @@ app.whenReady().then(() => {
     await handleScreenshotTrigger();
   });
 
+  // Register Ctrl+Shift+E to save screenshot of focused app window (works even when window is excluded from OS capture)
+  const saveScreenshotShortcut = globalShortcut.register('CommandOrControl+Shift+E', async () => {
+    const win = BrowserWindow.getFocusedWindow() || mainWindow;
+    const result = await takeWindowScreenshot(win);
+    if (result.success && result.filePath && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('screenshot-saved', result.filePath);
+    }
+  });
+
   // Register Ctrl+Shift+S for settings window
   const settingsShortcut = globalShortcut.register('CommandOrControl+Shift+S', () => {
     if (settingsWindow) {
@@ -1898,6 +1921,38 @@ ipcMain.handle('vision-analyze', async (event, instruction) => {
   await processVisionAnalysis(instruction);
 });
 
+// Take screenshot of a window (works even when window is excluded from OS capture)
+async function takeWindowScreenshot(win) {
+  if (!win || win.isDestroyed()) return { success: false, error: 'No window' };
+  const wc = win.webContents;
+  if (!wc) return { success: false, error: 'No web contents' };
+  try {
+    const image = await wc.capturePage();
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const defaultName = `screenshot_${timestamp}.png`;
+    const result = await dialog.showSaveDialog(win, {
+      title: 'Save screenshot',
+      defaultPath: path.join(app.getPath('pictures'), defaultName),
+      filters: [{ name: 'PNG Image', extensions: ['png'] }]
+    });
+    if (result.canceled || !result.filePath) return { success: false, canceled: true };
+    const buf = image.toPNG();
+    fs.writeFileSync(result.filePath, buf);
+    return { success: true, filePath: result.filePath };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+ipcMain.handle('take-screenshot', async (event, windowType) => {
+  let win = BrowserWindow.getFocusedWindow();
+  if (windowType === 'main' && mainWindow && !mainWindow.isDestroyed()) win = mainWindow;
+  else if (windowType === 'settings' && settingsWindow && !settingsWindow.isDestroyed()) win = settingsWindow;
+  else if (windowType === 'chat' && chatWindow && !chatWindow.isDestroyed()) win = chatWindow;
+  if (!win) win = mainWindow; // fallback to main
+  return takeWindowScreenshot(win);
+});
+
 // Store for global paste shortcut
 let lastGeneratedText = '';
 let lastGeneratedExplanation = '';  // Code explanation for coding mode
@@ -1933,6 +1988,10 @@ ipcMain.on('settings-init-sync', (event, s) => {
     }
     if (s.codingModeEnabled !== undefined) codingModeEnabled = s.codingModeEnabled;
     if (s.ultraHumanEnabled !== undefined) ultraHumanEnabled = s.ultraHumanEnabled;
+    if (s.ghostModeEnabled !== undefined) {
+      ghostModeEnabled = s.ghostModeEnabled;
+      applyGhostModeToAllWindows();
+    }
   }
 });
 
@@ -1964,7 +2023,8 @@ ipcMain.handle('get-settings-state', async () => {
     humanizeEnabled: humanizeTyping,
     liveModeEnabled,
     codingModeEnabled,
-    ultraHumanEnabled
+    ultraHumanEnabled,
+    ghostModeEnabled
   };
 });
 
@@ -1974,6 +2034,13 @@ ipcMain.on('settings-live-mode-toggle', (event, enabled) => {
   console.log('Live mode enabled:', liveModeEnabled);
   // Tell keystroke monitor about live mode state
   sendToMonitor({ cmd: 'set_live_mode', enabled: liveModeEnabled });
+});
+
+// IPC handler for ghost mode toggle (Ghost ON = hidden in screen share, Ghost OFF = visible in meetings)
+ipcMain.on('settings-ghost-mode-toggle', (event, enabled) => {
+  ghostModeEnabled = enabled;
+  console.log('Ghost mode (hide from screen share):', ghostModeEnabled);
+  applyGhostModeToAllWindows();
 });
 
 // IPC handler for coding mode toggle

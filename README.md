@@ -43,6 +43,7 @@ npm start
 | `Ctrl+Shift+P` | Inject AI response |
 | `Ctrl+Alt+Enter` | Fix grammar / continue writing |
 | `Ctrl+Shift+F` | Screenshot + Vision analysis |
+| `Ctrl+Shift+E` | **Save screenshot** of current window (use when OS capture is blocked) |
 | `Ctrl+Shift+V` | Voice input (hold to talk) |
 | `Ctrl+Shift+S` | Open settings |
 | `Ctrl+Shift+C` | Open chat window |

@@ -8,7 +8,8 @@ let settings = {
     liveModeEnabled: false,
     codingModeEnabled: false,
     ultraHumanEnabled: false,
-    darkMode: true
+    darkMode: true,
+    ghostModeEnabled: true  // default ON = hidden from screen share
 };
 
 // DOM Elements
@@ -19,6 +20,7 @@ let autoInjectToggle;
 let liveModeToggle;
 let codingModeToggle;
 let ultraHumanToggle;
+let ghostModeToggle;
 let closeBtn;
 
 // Initialize
@@ -30,6 +32,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     liveModeToggle = document.getElementById('live-mode-toggle');
     codingModeToggle = document.getElementById('coding-mode-toggle');
     ultraHumanToggle = document.getElementById('ultra-human-toggle');
+    ghostModeToggle = document.getElementById('ghost-mode-toggle');
     closeBtn = document.getElementById('close-btn');
 
     await loadSettings();
@@ -90,6 +93,13 @@ function setupEventListeners() {
         ipcRenderer.send('settings-ultra-human-toggle', settings.ultraHumanEnabled);
     });
 
+    // Ghost mode toggle
+    ghostModeToggle.addEventListener('change', () => {
+        settings.ghostModeEnabled = ghostModeToggle.checked;
+        saveSettings();
+        ipcRenderer.send('settings-ghost-mode-toggle', settings.ghostModeEnabled);
+    });
+
     // Close button
     closeBtn.addEventListener('click', () => {
         ipcRenderer.send('close-settings-window');
@@ -124,6 +134,7 @@ async function loadSettings() {
             settings.liveModeEnabled = mainState.liveModeEnabled;
             settings.codingModeEnabled = mainState.codingModeEnabled;
             settings.ultraHumanEnabled = mainState.ultraHumanEnabled;
+            if (mainState.ghostModeEnabled !== undefined) settings.ghostModeEnabled = mainState.ghostModeEnabled;
         }
     } catch (e) {
         console.error('Failed to sync settings with main process:', e);
@@ -146,6 +157,7 @@ function updateUI() {
     liveModeToggle.checked = settings.liveModeEnabled;
     codingModeToggle.checked = settings.codingModeEnabled;
     ultraHumanToggle.checked = settings.ultraHumanEnabled;
+    ghostModeToggle.checked = settings.ghostModeEnabled;
     applyTheme();
     updateDisabledState();
 }
@@ -406,6 +418,9 @@ ipcRenderer.on('sync-settings', (event, newSettings) => {
     }
     if (newSettings.ultraHumanEnabled !== undefined) {
         settings.ultraHumanEnabled = newSettings.ultraHumanEnabled;
+    }
+    if (newSettings.ghostModeEnabled !== undefined) {
+        settings.ghostModeEnabled = newSettings.ghostModeEnabled;
     }
     if (newSettings.darkMode !== undefined) {
         settings.darkMode = newSettings.darkMode;
